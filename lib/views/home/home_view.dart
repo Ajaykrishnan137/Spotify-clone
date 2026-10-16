@@ -53,7 +53,7 @@ class HomeView extends ConsumerWidget {
               loading: () => const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32.0),
-                  child: CircularProgressIndicator(color: AppColors.primary),
+                  child: CircularProgressIndicator(color: AppColors.accent),
                 ),
               ),
               error: (err, stack) => Center(
