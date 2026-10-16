@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/song_model.dart';
-import '../data/remote/supabase_songs_repository.dart';
+import '../../data/remote/supabase_songs_repository.dart';
 
 class CloudCatalogService {
   List<SongModel>? _cachedSongs;
