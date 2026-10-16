@@ -36,8 +36,9 @@ class EncryptedAudioSource extends StreamAudioSource {
     final Stream<List<int>> stream = Stream.value(bytes.sublist(s, e));
 
     return StreamAudioResponse(
-      range: StreamAudioRange(s, e),
       sourceLength: totalLength,
+      contentLength: e - s,
+      offset: s,
       contentType: 'audio/mpeg',
       stream: stream,
     );
