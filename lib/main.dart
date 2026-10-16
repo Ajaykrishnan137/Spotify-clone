@@ -24,7 +24,7 @@ class SpotifyApp extends ConsumerWidget {
     final router = createRouter(true);
 
     return MaterialApp.router(
-      title: 'Spotify',
+      title: 'SkyTune',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: router,

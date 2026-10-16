@@ -1,7 +1,7 @@
 class AppStrings {
   AppStrings._();
 
-  static const String appName = 'Spotify';
+  static const String appName = 'SkyTune';
   
   // Navigation
   static const String navHome = 'Home';

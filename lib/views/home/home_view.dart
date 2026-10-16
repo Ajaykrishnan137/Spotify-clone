@@ -32,7 +32,7 @@ class HomeView extends ConsumerWidget {
                 SpotifyDynamicLogo(size: 32),
                 SizedBox(width: 12),
                 Text(
-                  'Spotify',
+                  'SkyTune',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
