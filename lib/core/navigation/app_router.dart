@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'views/navigation/app_shell.dart';
-import 'views/home/home_view.dart';
-import 'views/search/search_view.dart';
-import 'views/library/library_view.dart';
-import 'views/settings/settings_view.dart';
-import 'views/auth/auth_view.dart';
+import '../../views/navigation/app_shell.dart';
+import '../../views/home/home_view.dart';
+import '../../views/search/search_view.dart';
+import '../../views/library/library_view.dart';
+import '../../views/settings/settings_view.dart';
+import '../../views/auth/auth_view.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
