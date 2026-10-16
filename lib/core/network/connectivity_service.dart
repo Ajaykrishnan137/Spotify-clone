@@ -33,6 +33,11 @@ class ConnectivityService extends StateNotifier<NetworkStatus> {
     final List<ConnectivityResult> results = await _connectivity.checkConnectivity();
     return results.contains(ConnectivityResult.wifi);
   }
+
+  Future<bool> isConnectedWifi() async {
+    final List<ConnectivityResult> results = await _connectivity.checkConnectivity();
+    return results.contains(ConnectivityResult.wifi);
+  }
 }
 
 final StateNotifierProvider<ConnectivityService, NetworkStatus> connectivityProvider =
