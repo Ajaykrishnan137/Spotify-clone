@@ -44,7 +44,8 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
-  void updateMediaItem(MediaItem item) {
+  @override
+  Future<void> updateMediaItem(MediaItem item) async {
     mediaItem.add(item);
   }
 
