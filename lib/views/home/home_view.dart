@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/services/cloud_catalog_service.dart';
 import '../shared_widgets/song_card.dart';
 import '../shared_widgets/song_tile.dart';
+import '../shared_widgets/spotify_logo.dart';
 import '../playlist/playlist_detail_view.dart';
 
 class HomeView extends ConsumerWidget {
@@ -26,13 +27,20 @@ class HomeView extends ConsumerWidget {
             floating: true,
             pinned: false,
             backgroundColor: AppColors.background,
-            title: const Text(
-              'Good evening',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+            title: const Row(
+              children: [
+                SpotifyDynamicLogo(size: 32),
+                SizedBox(width: 12),
+                Text(
+                  'Spotify',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
             ),
             actions: [
               IconButton(

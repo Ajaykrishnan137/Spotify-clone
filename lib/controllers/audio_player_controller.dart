@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/song_model.dart';
 import '../core/audio/audio_player_handler.dart';
 import '../core/security/key_manager.dart';
@@ -122,11 +124,16 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     );
 
     try {
-      if (song.isDownloaded && song.localPath != null && File(song.localPath!).existsSync()) {
+      // Check if downloaded offline file exists
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final localFile = File(p.join(appDocDir.path, 'secure_audio', '${song.id}.dat'));
+
+      if (localFile.existsSync() || (song.isDownloaded && song.localPath != null && File(song.localPath!).existsSync())) {
+        final targetFile = localFile.existsSync() ? localFile : File(song.localPath!);
         // Securely stream decrypted chunks on the fly
         final key = await _keyManager.getOrCreateMasterKey();
         final source = EncryptedAudioSource(
-          file: File(song.localPath!),
+          file: targetFile,
           key: key,
         );
         await _audioHandler.player.setAudioSource(source);

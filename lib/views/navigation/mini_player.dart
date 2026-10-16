@@ -5,6 +5,7 @@ import '../../controllers/audio_player_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../shared_widgets/app_image.dart';
+import '../shared_widgets/spotify_logo.dart';
 import 'now_playing_sheet.dart';
 
 class MiniPlayer extends ConsumerWidget {
@@ -13,6 +14,7 @@ class MiniPlayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playerState = ref.watch(audioPlayerControllerProvider);
+    final themeColor = ref.watch(nowPlayingThemeColorProvider);
     final currentSong = playerState.currentSong;
 
     if (currentSong == null) {
@@ -33,17 +35,25 @@ class MiniPlayer extends ConsumerWidget {
           builder: (_) => const NowPlayingSheet(),
         );
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
         height: Dimensions.miniPlayerHeight,
         margin: const EdgeInsets.symmetric(horizontal: Dimensions.space8, vertical: Dimensions.space4),
         decoration: BoxDecoration(
-          color: AppColors.elevated,
+          gradient: LinearGradient(
+            colors: [
+              themeColor.withOpacity(0.35),
+              AppColors.elevated,
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
           borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              color: themeColor.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -109,8 +119,8 @@ class MiniPlayer extends ConsumerWidget {
             LinearProgressIndicator(
               value: progress,
               backgroundColor: AppColors.surface,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
-              minHeight: 2.0,
+              valueColor: AlwaysStoppedAnimation<Color>(themeColor),
+              minHeight: 2.5,
             ),
           ],
         ),

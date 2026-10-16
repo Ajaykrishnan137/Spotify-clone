@@ -10,6 +10,7 @@ import '../../core/constants/dimensions.dart';
 import '../../core/utils/formatters.dart';
 import '../shared_widgets/app_image.dart';
 import '../shared_widgets/download_button.dart';
+import '../shared_widgets/spotify_logo.dart';
 
 class NowPlayingSheet extends ConsumerStatefulWidget {
   const NowPlayingSheet({super.key});
@@ -48,6 +49,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
   @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(audioPlayerControllerProvider);
+    final themeColor = ref.watch(nowPlayingThemeColorProvider);
     final song = playerState.currentSong;
 
     if (song == null) {
@@ -57,13 +59,16 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
     final double maxMs = playerState.duration.inMilliseconds.toDouble();
     final double curMs = playerState.position.inMilliseconds.toDouble().clamp(0.0, maxMs > 0 ? maxMs : 1.0);
 
-    return Container(
+    final effectiveColor = _dominantColor != AppColors.surface ? _dominantColor : themeColor;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            _dominantColor.withOpacity(0.85),
+            effectiveColor.withOpacity(0.9),
             AppColors.background,
           ],
         ),
@@ -84,7 +89,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                   Column(
                     children: [
                       const Text(
-                        'PLAYING FROM PLAYLIST',
+                        'PLAYING FROM ALBUM',
                         style: TextStyle(fontSize: 10, letterSpacing: 1.0, color: AppColors.textSecondary),
                       ),
                       Text(
@@ -93,19 +98,33 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () {},
-                  ),
+                  const SpotifyDynamicLogo(size: 26, animated: true),
                 ],
               ),
-              const Spacer(),
-              // Cover Art
-              AppImage(
-                url: song.coverUrl,
-                width: MediaQuery.of(context).size.width - 48,
-                height: MediaQuery.of(context).size.width - 48,
-                borderRadius: Dimensions.radiusLarge,
+              // Cover Art with dynamic breathing and glow
+              AnimatedScale(
+                scale: playerState.isPlaying ? 1.0 : 0.88,
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOutBack,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
+                    boxShadow: [
+                      BoxShadow(
+                        color: effectiveColor.withOpacity(playerState.isPlaying ? 0.35 : 0.1),
+                        blurRadius: playerState.isPlaying ? 28 : 12,
+                        spreadRadius: playerState.isPlaying ? 4 : 0,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: AppImage(
+                    url: song.coverUrl,
+                    width: MediaQuery.of(context).size.width - 56,
+                    height: MediaQuery.of(context).size.width - 56,
+                    borderRadius: Dimensions.radiusLarge,
+                  ),
+                ),
               ),
               const Spacer(),
               // Title & Artist
@@ -168,9 +187,9 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                 data: SliderTheme.of(context).copyWith(
                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                   overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                  activeTrackColor: AppColors.textPrimary,
+                  activeTrackColor: effectiveColor,
                   inactiveTrackColor: AppColors.textSecondary.withOpacity(0.3),
-                  thumbColor: AppColors.textPrimary,
+                  thumbColor: Colors.white,
                 ),
                 child: Slider(
                   value: curMs,
@@ -207,7 +226,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                   IconButton(
                     icon: Icon(
                       Icons.shuffle,
-                      color: playerState.isShuffle ? AppColors.accent : AppColors.textSecondary,
+                      color: playerState.isShuffle ? effectiveColor : AppColors.textSecondary,
                     ),
                     onPressed: () {
                       ref.read(audioPlayerControllerProvider.notifier).toggleShuffle();
@@ -224,16 +243,23 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ref.read(audioPlayerControllerProvider.notifier).togglePlayPause();
                     },
                     child: Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: AppColors.textPrimary,
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        color: effectiveColor,
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: effectiveColor.withOpacity(0.4),
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
+                        ],
                       ),
                       child: Icon(
                         playerState.isPlaying ? Icons.pause : Icons.play_arrow,
                         color: Colors.black,
-                        size: 36,
+                        size: 38,
                       ),
                     ),
                   ),

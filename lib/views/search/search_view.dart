@@ -7,6 +7,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/empty_view.dart';
+import '../shared_widgets/spotify_logo.dart';
 import '../../core/services/cloud_catalog_service.dart';
 
 class SearchView extends ConsumerStatefulWidget {
@@ -112,40 +113,52 @@ class _SearchViewState extends ConsumerState<SearchView> {
               ),
             ),
             if (_isLoading)
-              const LinearProgressIndicator(
-                backgroundColor: AppColors.surface,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.accent),
+              Consumer(
+                builder: (_, ref, __) {
+                  final themeColor = ref.watch(nowPlayingThemeColorProvider);
+                  return LinearProgressIndicator(
+                    backgroundColor: AppColors.surface,
+                    valueColor: AlwaysStoppedAnimation<Color>(themeColor),
+                    minHeight: 2.5,
+                  );
+                },
               ),
             Expanded(
-              child: _searchController.text.isEmpty
-                  ? const EmptyView(
-                      title: 'Play what you love',
-                      subtitle: 'Search for artists, songs, podcasts, and playlists.',
-                      icon: Icons.search,
-                    )
-                  : _results.isEmpty && !_isLoading
-                      ? const EmptyView(
-                          title: 'No results found',
-                          subtitle: 'Please check your spelling or try another keyword.',
-                          icon: Icons.music_off,
-                        )
-                      : ListView.builder(
-                          itemCount: _results.length,
-                          itemBuilder: (context, index) {
-                            final song = _results[index];
-                            return SongTile(
-                              song: song,
-                              isPlaying: playerState.currentSong?.id == song.id,
-                              onTap: () {
-                                ref.read(audioPlayerControllerProvider.notifier).playSong(
-                                      song,
-                                      queue: _results,
-                                      index: index,
-                                    );
-                              },
-                            );
-                          },
-                        ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: _searchController.text.isEmpty
+                    ? const EmptyView(
+                        key: ValueKey('empty_search'),
+                        title: 'Play what you love',
+                        subtitle: 'Search for artists, songs, and albums.',
+                        icon: Icons.search,
+                      )
+                    : _results.isEmpty && !_isLoading
+                        ? const EmptyView(
+                            key: ValueKey('no_results'),
+                            title: 'No results found',
+                            subtitle: 'Please check your spelling or try another keyword.',
+                            icon: Icons.music_off,
+                          )
+                        : ListView.builder(
+                            key: const ValueKey('results_list'),
+                            itemCount: _results.length,
+                            itemBuilder: (context, index) {
+                              final song = _results[index];
+                              return SongTile(
+                                song: song,
+                                isPlaying: playerState.currentSong?.id == song.id,
+                                onTap: () {
+                                  ref.read(audioPlayerControllerProvider.notifier).playSong(
+                                        song,
+                                        queue: _results,
+                                        index: index,
+                                      );
+                                },
+                              );
+                            },
+                          ),
+              ),
             ),
           ],
         ),

@@ -12,6 +12,11 @@ class DownloadTasksDao extends DatabaseAccessor<AppDatabase> with _$DownloadTask
     return select(downloadTasks).watch().map((rows) => rows.map(_toModel).toList());
   }
 
+  Future<List<DownloadTaskState>> getAllTasks() async {
+    final rows = await select(downloadTasks).get();
+    return rows.map(_toModel).toList();
+  }
+
   Future<DownloadTaskState?> getTask(String songId) async {
     final row = await (select(downloadTasks)..where((tbl) => tbl.songId.equals(songId))).getSingleOrNull();
     return row != null ? _toModel(row) : null;

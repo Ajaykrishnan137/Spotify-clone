@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import 'app_image.dart';
 import 'download_button.dart';
+import 'spotify_logo.dart';
 
 class SongTile extends ConsumerWidget {
   final SongModel song;
@@ -117,6 +118,7 @@ class SongTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final downloadTasks = ref.watch(downloadControllerProvider);
+    final themeColor = ref.watch(nowPlayingThemeColorProvider);
     final task = downloadTasks[song.id] ?? DownloadTaskState(songId: song.id);
 
     return InkWell(
@@ -127,11 +129,32 @@ class SongTile extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
         child: Row(
           children: [
-            AppImage(
-              url: song.coverUrl,
-              width: 48,
-              height: 48,
-              borderRadius: Dimensions.radiusSmall,
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                AppImage(
+                  url: song.coverUrl,
+                  width: 48,
+                  height: 48,
+                  borderRadius: Dimensions.radiusSmall,
+                ),
+                if (isPlaying)
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.55),
+                      borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.graphic_eq_rounded,
+                        color: themeColor,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: Dimensions.space12),
             Expanded(
@@ -144,7 +167,7 @@ class SongTile extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isPlaying ? AppColors.accent : AppColors.textPrimary,
+                      color: isPlaying ? themeColor : AppColors.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
@@ -153,7 +176,7 @@ class SongTile extends ConsumerWidget {
                   Row(
                     children: [
                       if (song.isDownloaded || task.status == DownloadStatus.downloaded) ...[
-                        const Icon(Icons.download_done, color: AppColors.accent, size: 14),
+                        Icon(Icons.download_done, color: isPlaying ? themeColor : AppColors.accent, size: 14),
                         const SizedBox(width: Dimensions.space4),
                       ],
                       Expanded(

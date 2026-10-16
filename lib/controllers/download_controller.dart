@@ -38,7 +38,20 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
         _tasksDao = tasksDao,
         _keyManager = keyManager,
         _connectivityService = connectivityService,
-        super({});
+        super({}) {
+    _initTasks();
+  }
+
+  Future<void> _initTasks() async {
+    try {
+      final tasks = await _tasksDao.getAllTasks();
+      final map = <String, DownloadTaskState>{};
+      for (final t in tasks) {
+        map[t.songId] = t;
+      }
+      state = map;
+    } catch (_) {}
+  }
 
   void setWifiOnly(bool value) {
     _wifiOnly = value;
@@ -107,7 +120,7 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
         await sink.close();
         client.close();
 
-        await _processDownloadedFile(song.id, tempFile);
+        await _processDownloadedFile(song, tempFile);
       } else {
         throw Exception('Download failed with status ${response.statusCode}');
       }
@@ -124,12 +137,15 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     }
   }
 
-  Future<void> _processDownloadedFile(String songId, File tempFile) async {
+  Future<void> _processDownloadedFile(SongModel songModel, File tempFile) async {
+    final songId = songModel.id;
     final cur = state[songId] ?? DownloadTaskState(songId: songId);
     state = {...state, songId: cur.copyWith(status: DownloadStatus.encrypting, progress: 0.9)};
 
     if (!tempFile.existsSync()) return;
 
+    // Ensure song exists in SQLite DB so markDownloaded works
+    await _songsDao.upsertSong(songModel);
     final song = await _songsDao.getSongById(songId);
 
     // 2. Verify integrity if hash present
@@ -176,6 +192,15 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     );
     state = {...state, songId: completeState};
     await _tasksDao.upsertTask(completeState);
+  }
+
+  Future<void> downloadMultipleSongs(List<SongModel> songs) async {
+    for (final song in songs) {
+      final cur = state[song.id]?.status;
+      if (cur != DownloadStatus.downloaded && cur != DownloadStatus.downloading) {
+        await startDownload(song);
+      }
+    }
   }
 
   Future<void> deleteDownload(String songId) async {

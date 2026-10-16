@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/connectivity_service.dart';
+import '../shared_widgets/spotify_logo.dart';
 import 'mini_player.dart';
 
 class AppShell extends ConsumerWidget {
@@ -13,6 +14,7 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final netStatus = ref.watch(connectivityProvider);
+    final themeColor = ref.watch(nowPlayingThemeColorProvider);
     final isOffline = netStatus == NetworkStatus.offline;
 
     return Scaffold(
@@ -49,7 +51,7 @@ class AppShell extends ConsumerWidget {
           initialLocation: index == navigationShell.currentIndex,
         ),
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.textPrimary,
+        selectedItemColor: themeColor,
         unselectedItemColor: AppColors.textSecondary,
         items: const [
           BottomNavigationBarItem(
