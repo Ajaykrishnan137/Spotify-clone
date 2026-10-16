@@ -53,3 +53,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/songs_cloud_catalog.json
+    - assets/covers/

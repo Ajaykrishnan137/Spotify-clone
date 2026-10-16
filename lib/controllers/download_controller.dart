@@ -12,6 +12,8 @@ import '../data/local/daos/songs_dao.dart';
 import '../data/local/daos/download_tasks_dao.dart';
 import '../data/remote/supabase_songs_repository.dart';
 import '../core/network/connectivity_service.dart';
+import 'playlist_controller.dart';
+import 'audio_player_controller.dart';
 
 class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   final SupabaseSongsRepository _songsRepo;
@@ -197,3 +199,23 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     state = {};
   }
 }
+
+final downloadTasksDaoProvider = Provider<DownloadTasksDao>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return DownloadTasksDao(db);
+});
+
+final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
+  return ConnectivityService();
+});
+
+final downloadControllerProvider =
+    StateNotifierProvider<DownloadController, Map<String, DownloadTaskState>>((ref) {
+  return DownloadController(
+    songsRepo: ref.watch(supabaseSongsRepoProvider),
+    songsDao: ref.watch(songsDaoProvider),
+    tasksDao: ref.watch(downloadTasksDaoProvider),
+    keyManager: ref.watch(keyManagerProvider),
+    connectivityService: ref.watch(connectivityServiceProvider),
+  );
+});

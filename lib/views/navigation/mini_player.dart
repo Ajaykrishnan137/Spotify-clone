@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../controllers/audio_player_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
+import '../shared_widgets/app_image.dart';
 import 'now_playing_sheet.dart';
 
 class MiniPlayer extends ConsumerWidget {
@@ -51,19 +52,11 @@ class MiniPlayer extends ConsumerWidget {
             Expanded(
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(Dimensions.radiusMedium),
-                      bottomLeft: Radius.circular(Dimensions.radiusMedium),
-                    ),
-                    child: CachedNetworkImage(
-                      imageUrl: currentSong.coverUrl,
-                      width: Dimensions.miniPlayerHeight - 2,
-                      height: Dimensions.miniPlayerHeight - 2,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(color: AppColors.card),
-                      errorWidget: (_, __, ___) => const Icon(Icons.music_note, color: AppColors.textSecondary),
-                    ),
+                  AppImage(
+                    url: currentSong.coverUrl,
+                    width: Dimensions.miniPlayerHeight - 2,
+                    height: Dimensions.miniPlayerHeight - 2,
+                    borderRadius: Dimensions.radiusSmall,
                   ),
                   const SizedBox(width: Dimensions.space12),
                   Expanded(

@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../../controllers/audio_player_controller.dart';
+import '../../controllers/download_controller.dart';
+import '../../models/download_state.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../../core/utils/formatters.dart';
+import '../shared_widgets/app_image.dart';
+import '../shared_widgets/download_button.dart';
 
 class NowPlayingSheet extends ConsumerStatefulWidget {
   const NowPlayingSheet({super.key});
@@ -97,18 +101,11 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
               ),
               const Spacer(),
               // Cover Art
-              ClipRRect(
-                borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                child: CachedNetworkImage(
-                  imageUrl: song.coverUrl,
-                  width: MediaQuery.of(context).size.width - 48,
-                  height: MediaQuery.of(context).size.width - 48,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(
-                    color: AppColors.card,
-                    child: const Icon(Icons.music_note, size: 80, color: AppColors.textSecondary),
-                  ),
-                ),
+              AppImage(
+                url: song.coverUrl,
+                width: MediaQuery.of(context).size.width - 48,
+                height: MediaQuery.of(context).size.width - 48,
+                borderRadius: Dimensions.radiusLarge,
               ),
               const Spacer(),
               // Title & Artist
@@ -142,9 +139,26 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.favorite_border, color: AppColors.textPrimary, size: 28),
-                    onPressed: () {},
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final downloadTasks = ref.watch(downloadControllerProvider);
+                          final task = downloadTasks[song.id] ?? DownloadTaskState(songId: song.id);
+                          return DownloadButton(
+                            status: task.status,
+                            progress: task.progress,
+                            onDownload: () => ref.read(downloadControllerProvider.notifier).startDownload(song),
+                            onDelete: () => ref.read(downloadControllerProvider.notifier).deleteDownload(song.id),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.favorite_border, color: AppColors.textPrimary, size: 28),
+                        onPressed: () {},
+                      ),
+                    ],
                   ),
                 ],
               ),

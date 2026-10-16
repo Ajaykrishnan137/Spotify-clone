@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/services/cloud_catalog_service.dart';
 import '../shared_widgets/song_card.dart';
 import '../shared_widgets/song_tile.dart';
+import '../playlist/playlist_detail_view.dart';
 
 class HomeView extends ConsumerWidget {
   const HomeView({super.key});
@@ -124,22 +125,43 @@ class HomeView extends ConsumerWidget {
                         children: [
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  category.toUpperCase(),
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.1,
-                                    color: AppColors.textPrimary,
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PlaylistDetailView(
+                                      title: category.toUpperCase(),
+                                      subtitle: 'Folder Collection',
+                                      coverUrl: categorySongs.isNotEmpty ? categorySongs.first.coverUrl : null,
+                                      songs: categorySongs,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${categorySongs.length} songs',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                                ),
-                              ],
+                                );
+                              },
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        category.toUpperCase(),
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.1,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary),
+                                    ],
+                                  ),
+                                  Text(
+                                    'See all (${categorySongs.length})',
+                                    style: const TextStyle(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           ...categorySongs.take(8).map(
