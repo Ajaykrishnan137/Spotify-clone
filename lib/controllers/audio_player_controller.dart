@@ -124,21 +124,28 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     );
 
     try {
-      // Check if downloaded offline file exists
+      // Check if downloaded offline file exists (check offline_music mp3 first, then secure_audio dat)
       final appDocDir = await getApplicationDocumentsDirectory();
-      final localFile = File(p.join(appDocDir.path, 'secure_audio', '${song.id}.dat'));
+      final offlineMp3 = File(p.join(appDocDir.path, 'offline_music', '${song.id}.mp3'));
+      final secureDat = File(p.join(appDocDir.path, 'secure_audio', '${song.id}.dat'));
 
-      if (localFile.existsSync() || (song.isDownloaded && song.localPath != null && File(song.localPath!).existsSync())) {
-        final targetFile = localFile.existsSync() ? localFile : File(song.localPath!);
-        // Securely stream decrypted chunks on the fly
+      if (offlineMp3.existsSync()) {
+        await _audioHandler.player.setFilePath(offlineMp3.path);
+      } else if (song.localPath != null && File(song.localPath!).existsSync()) {
+        final f = File(song.localPath!);
+        if (f.path.endsWith('.mp3')) {
+          await _audioHandler.player.setFilePath(f.path);
+        } else {
+          final key = await _keyManager.getOrCreateMasterKey();
+          final source = EncryptedAudioSource(file: f, key: key);
+          await _audioHandler.player.setAudioSource(source);
+        }
+      } else if (secureDat.existsSync()) {
         final key = await _keyManager.getOrCreateMasterKey();
-        final source = EncryptedAudioSource(
-          file: targetFile,
-          key: key,
-        );
+        final source = EncryptedAudioSource(file: secureDat, key: key);
         await _audioHandler.player.setAudioSource(source);
       } else {
-        // Fetch fresh 1-hour signed URL from private Supabase bucket
+        // Fetch streaming URL
         final res = await _songsRepo.getSignedAudioUrl(song.storagePath);
         final url = res.dataOrNull ?? song.storagePath;
         await _audioHandler.player.setUrl(url);
@@ -152,10 +159,15 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
   }
 
   Future<void> togglePlayPause() async {
-    if (_audioHandler.player.playing) {
-      await _audioHandler.player.pause();
-    } else {
-      await _audioHandler.player.play();
+    // If no song is loaded or playback state is stopped/idle, resume or start first song
+    if (state.currentSong != null) {
+      if (_audioHandler.player.playing) {
+        await _audioHandler.player.pause();
+        state = state.copyWith(isPlaying: false);
+      } else {
+        await _audioHandler.player.play();
+        state = state.copyWith(isPlaying: true);
+      }
     }
   }
 

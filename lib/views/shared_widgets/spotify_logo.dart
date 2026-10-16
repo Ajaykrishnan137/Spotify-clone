@@ -128,7 +128,7 @@ class _SpotifyDynamicLogoState extends ConsumerState<SpotifyDynamicLogo>
   }
 }
 
-/// Custom painter for the iconic 3 curved Spotify sound waves
+/// Custom painter for the official Spotify brand emblem (3 tilted concentric sound waves)
 class SpotifyWavesPainter extends CustomPainter {
   final Color color;
 
@@ -136,34 +136,42 @@ class SpotifyWavesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Rotate slightly (-18 deg) around center to match official Spotify badge angle
+    canvas.save();
+    canvas.translate(w / 2, h / 2);
+    canvas.rotate(-0.30); // ~ -17.2 degrees
+    canvas.translate(-w / 2, -h / 2);
+
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final w = size.width;
-    final h = size.height;
-
-    // Top wave
-    paint.strokeWidth = w * 0.14;
+    // 1. Top Arc (longest, thickest)
+    paint.strokeWidth = w * 0.125;
     final topPath = Path()
-      ..moveTo(w * 0.15, h * 0.30)
-      ..quadraticBezierTo(w * 0.55, h * 0.14, w * 0.85, h * 0.38);
+      ..moveTo(w * 0.18, h * 0.36)
+      ..quadraticBezierTo(w * 0.52, h * 0.20, w * 0.84, h * 0.40);
     canvas.drawPath(topPath, paint);
 
-    // Middle wave
-    paint.strokeWidth = w * 0.13;
+    // 2. Middle Arc (medium)
+    paint.strokeWidth = w * 0.115;
     final midPath = Path()
-      ..moveTo(w * 0.22, h * 0.52)
-      ..quadraticBezierTo(w * 0.55, h * 0.40, w * 0.80, h * 0.60);
+      ..moveTo(w * 0.23, h * 0.53)
+      ..quadraticBezierTo(w * 0.52, h * 0.40, w * 0.79, h * 0.57);
     canvas.drawPath(midPath, paint);
 
-    // Bottom wave
-    paint.strokeWidth = w * 0.11;
+    // 3. Bottom Arc (shortest)
+    paint.strokeWidth = w * 0.105;
     final botPath = Path()
-      ..moveTo(w * 0.30, h * 0.74)
-      ..quadraticBezierTo(w * 0.55, h * 0.66, w * 0.74, h * 0.80);
+      ..moveTo(w * 0.29, h * 0.70)
+      ..quadraticBezierTo(w * 0.52, h * 0.60, w * 0.73, h * 0.73);
     canvas.drawPath(botPath, paint);
+
+    canvas.restore();
   }
 
   @override

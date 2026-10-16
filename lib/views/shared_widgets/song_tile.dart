@@ -9,6 +9,7 @@ import '../../core/constants/dimensions.dart';
 import 'app_image.dart';
 import 'download_button.dart';
 import 'spotify_logo.dart';
+import 'animated_equalizer_bars.dart';
 
 class SongTile extends ConsumerWidget {
   final SongModel song;
@@ -143,14 +144,13 @@ class SongTile extends ConsumerWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.55),
+                      color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
                     ),
                     child: Center(
-                      child: Icon(
-                        Icons.graphic_eq_rounded,
+                      child: AnimatedEqualizerBars(
                         color: themeColor,
-                        size: 24,
+                        size: 22,
                       ),
                     ),
                   ),

@@ -161,29 +161,26 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       }
     }
 
-    // 3. Encrypt to private storage with .nomedia
+    // 3. Save to private offline music storage
     final appDocDir = await getApplicationDocumentsDirectory();
-    final secureMusicDir = Directory(p.join(appDocDir.path, 'secure_audio'));
-    if (!secureMusicDir.existsSync()) {
-      secureMusicDir.createSync(recursive: true);
-      File(p.join(secureMusicDir.path, '.nomedia')).createSync();
+    final offlineMusicDir = Directory(p.join(appDocDir.path, 'offline_music'));
+    if (!offlineMusicDir.existsSync()) {
+      offlineMusicDir.createSync(recursive: true);
+      File(p.join(offlineMusicDir.path, '.nomedia')).createSync();
     }
 
-    final targetEncryptedFile = File(p.join(secureMusicDir.path, '$songId.dat'));
-    final masterKey = await _keyManager.getOrCreateMasterKey();
-
-    await _fileCipher.encryptFile(
-      inputFile: tempFile,
-      outputFile: targetEncryptedFile,
-      key: masterKey,
-    );
+    final targetFile = File(p.join(offlineMusicDir.path, '$songId.mp3'));
+    if (targetFile.existsSync()) {
+      targetFile.deleteSync();
+    }
+    await tempFile.copy(targetFile.path);
 
     if (tempFile.existsSync()) {
       tempFile.deleteSync();
     }
 
     // 4. Update local SQLite DB
-    await _songsDao.markDownloaded(songId, targetEncryptedFile.path);
+    await _songsDao.markDownloaded(songId, targetFile.path);
 
     final completeState = DownloadTaskState(
       songId: songId,
@@ -204,6 +201,12 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   }
 
   Future<void> deleteDownload(String songId) async {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final f1 = File(p.join(appDocDir.path, 'offline_music', '$songId.mp3'));
+    if (f1.existsSync()) f1.deleteSync();
+    final f2 = File(p.join(appDocDir.path, 'secure_audio', '$songId.dat'));
+    if (f2.existsSync()) f2.deleteSync();
+
     final song = await _songsDao.getSongById(songId);
     if (song?.localPath != null) {
       final f = File(song!.localPath!);
@@ -216,6 +219,10 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
 
   Future<void> deleteAllDownloads() async {
     final appDocDir = await getApplicationDocumentsDirectory();
+    final offlineDir = Directory(p.join(appDocDir.path, 'offline_music'));
+    if (offlineDir.existsSync()) {
+      offlineDir.deleteSync(recursive: true);
+    }
     final secureMusicDir = Directory(p.join(appDocDir.path, 'secure_audio'));
     if (secureMusicDir.existsSync()) {
       secureMusicDir.deleteSync(recursive: true);

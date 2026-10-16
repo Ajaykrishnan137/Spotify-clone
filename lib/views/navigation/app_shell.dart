@@ -51,7 +51,7 @@ class AppShell extends ConsumerWidget {
           initialLocation: index == navigationShell.currentIndex,
         ),
         backgroundColor: AppColors.surface,
-        selectedItemColor: themeColor,
+        selectedItemColor: AppColors.accent,
         unselectedItemColor: AppColors.textSecondary,
         items: const [
           BottomNavigationBarItem(

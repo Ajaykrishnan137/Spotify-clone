@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../shared_widgets/app_image.dart';
 import '../shared_widgets/spotify_logo.dart';
+import '../shared_widgets/animated_equalizer_bars.dart';
 import 'now_playing_sheet.dart';
 
 class MiniPlayer extends ConsumerWidget {
@@ -85,14 +86,24 @@ class MiniPlayer extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: Dimensions.space2),
-                        Text(
-                          currentSong.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
+                        Row(
+                          children: [
+                            if (playerState.isPlaying) ...[
+                              AnimatedEqualizerBars(color: themeColor, size: 12),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                currentSong.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

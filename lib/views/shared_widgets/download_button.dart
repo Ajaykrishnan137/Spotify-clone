@@ -22,8 +22,33 @@ class DownloadButton extends StatelessWidget {
       case DownloadStatus.downloaded:
         return IconButton(
           icon: const Icon(Icons.download_done, color: AppColors.accent),
-          onPressed: onDelete,
-          tooltip: 'Remove download',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: AppColors.card,
+                title: const Text('Remove Download?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                content: const Text(
+                  'This song will no longer be available for offline playback.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      onDelete();
+                    },
+                    child: const Text('Remove', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          },
+          tooltip: 'Downloaded (Tap to manage)',
         );
       case DownloadStatus.downloading:
       case DownloadStatus.encrypting:
