@@ -30,12 +30,13 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Scaffold Android Wrapper
+      - name: Scaffold & Configure Android
         run: |
           mkdir temp_app
           flutter create --org com.wavely.music --project-name wavely temp_app
           cp -rn temp_app/android/* android/ || true
           rm -rf temp_app
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
       - name: Get Dependencies
         run: flutter pub get
