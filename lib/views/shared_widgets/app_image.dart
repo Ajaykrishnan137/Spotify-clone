@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../core/constants/app_colors.dart';
+import 'package:wavely/core/constants/app_colors.dart';
 
 class AppImage extends StatelessWidget {
   final String url;
