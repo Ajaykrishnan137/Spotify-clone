@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:background_downloader/background_downloader.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import '../models/song_model.dart';
 import '../models/download_state.dart';
@@ -36,22 +36,10 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
         _tasksDao = tasksDao,
         _keyManager = keyManager,
         _connectivityService = connectivityService,
-        super({}) {
-    _initDownloader();
-  }
+        super({});
 
   void setWifiOnly(bool value) {
     _wifiOnly = value;
-  }
-
-  Future<void> _initDownloader() async {
-    FileDownloader().updates.listen((update) {
-      if (update is TaskProgressUpdate) {
-        _updateProgress(update.task.taskId, update.progress);
-      } else if (update is TaskStatusUpdate) {
-        _handleStatusUpdate(update);
-      }
-    });
   }
 
   void _updateProgress(String songId, double progress) {
@@ -61,32 +49,11 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       progress: progress,
     );
     state = {...state, songId: updated};
-    _tasksDao.upsertTask(updated);
-  }
-
-  Future<void> _handleStatusUpdate(TaskStatusUpdate update) async {
-    final songId = update.task.taskId;
-    if (update.status == TaskStatus.complete) {
-      await _onDownloadComplete(songId, update.task);
-    } else if (update.status == TaskStatus.failed) {
-      final current = state[songId] ?? DownloadTaskState(songId: songId);
-      final updated = current.copyWith(
-        status: DownloadStatus.failed,
-        error: update.exception?.description ?? 'Download failed',
-        retryCount: current.retryCount + 1,
-      );
-      state = {...state, songId: updated};
-      _tasksDao.upsertTask(updated);
-    } else if (update.status == TaskStatus.canceled) {
-      final updated = DownloadTaskState(songId: songId, status: DownloadStatus.canceled);
-      state = {...state, songId: updated};
-      _tasksDao.upsertTask(updated);
-    }
   }
 
   Future<void> startDownload(SongModel song) async {
     if (_wifiOnly) {
-      final isWifi = await _connectivityService.isWifiOnly();
+      final isWifi = await _connectivityService.isConnectedWifi();
       if (!isWifi) {
         final err = DownloadTaskState(
           songId: song.id,
@@ -98,9 +65,9 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       }
     }
 
-    _updateProgress(song.id, 0.0);
+    _updateProgress(song.id, 0.1);
 
-    // 1. Fetch fresh short-lived signed URL
+    // 1. Fetch streaming or signed URL
     final res = await _songsRepo.getSignedAudioUrl(song.storagePath);
     if (res.isFailure) {
       final err = DownloadTaskState(
@@ -114,35 +81,56 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
 
     final url = res.dataOrNull!;
     final tempDir = await getTemporaryDirectory();
-    final tempFilePath = p.join(tempDir.path, '${song.id}_temp.mp3');
+    final tempFile = File(p.join(tempDir.path, '${song.id}_temp.mp3'));
 
-    // 2. Start background download
-    final task = DownloadTask(
-      taskId: song.id,
-      url: url,
-      filename: '${song.id}_temp.mp3',
-      directory: tempDir.path,
-      baseDirectory: BaseDirectory.temporary,
-      updates: Updates.statusAndProgress,
-      retries: 3,
-      allowPause: true,
-    );
+    try {
+      _updateProgress(song.id, 0.3);
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(url));
+      final response = await client.send(request);
 
-    await FileDownloader().enqueue(task);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final totalBytes = response.contentLength ?? 0;
+        int receivedBytes = 0;
+        final sink = tempFile.openWrite();
+
+        await response.stream.listen((chunk) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          if (totalBytes > 0) {
+            _updateProgress(song.id, 0.3 + (0.5 * (receivedBytes / totalBytes)));
+          }
+        }).asFuture();
+
+        await sink.close();
+        client.close();
+
+        await _processDownloadedFile(song.id, tempFile);
+      } else {
+        throw Exception('Download failed with status ${response.statusCode}');
+      }
+    } catch (e) {
+      state = {
+        ...state,
+        song.id: DownloadTaskState(
+          songId: song.id,
+          status: DownloadStatus.failed,
+          error: e.toString(),
+        )
+      };
+      if (tempFile.existsSync()) tempFile.deleteSync();
+    }
   }
 
-  Future<void> _onDownloadComplete(String songId, Task task) async {
+  Future<void> _processDownloadedFile(String songId, File tempFile) async {
     final cur = state[songId] ?? DownloadTaskState(songId: songId);
-    state = {...state, songId: cur.copyWith(status: DownloadStatus.encrypting, progress: 1.0)};
-
-    final tempDir = await getTemporaryDirectory();
-    final tempFile = File(p.join(tempDir.path, '${songId}_temp.mp3'));
+    state = {...state, songId: cur.copyWith(status: DownloadStatus.encrypting, progress: 0.9)};
 
     if (!tempFile.existsSync()) return;
 
     final song = await _songsDao.getSongById(songId);
 
-    // 3. Verify SHA-256 integrity
+    // 2. Verify integrity if hash present
     if (song != null && song.fileHash.isNotEmpty) {
       final isValid = await _integrityService.verifyFileHash(tempFile, song.fileHash);
       if (!isValid) {
@@ -155,12 +143,11 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       }
     }
 
-    // 4. Encrypt to private storage with .nomedia
+    // 3. Encrypt to private storage with .nomedia
     final appDocDir = await getApplicationDocumentsDirectory();
     final secureMusicDir = Directory(p.join(appDocDir.path, 'secure_audio'));
     if (!secureMusicDir.existsSync()) {
       secureMusicDir.createSync(recursive: true);
-      // Create .nomedia file to prevent Android MediaScanner indexing
       File(p.join(secureMusicDir.path, '.nomedia')).createSync();
     }
 
@@ -173,12 +160,11 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       key: masterKey,
     );
 
-    // Safely delete temp unencrypted file
     if (tempFile.existsSync()) {
       tempFile.deleteSync();
     }
 
-    // 5. Update local SQLite DB
+    // 4. Update local SQLite DB
     await _songsDao.markDownloaded(songId, targetEncryptedFile.path);
 
     final completeState = DownloadTaskState(

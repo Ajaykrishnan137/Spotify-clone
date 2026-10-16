@@ -28,8 +28,8 @@ dependencies:
   audio_service: ^0.18.15
   audio_session: ^0.1.19
 
-  # Background Downloads
-  background_downloader: ^8.5.0
+  # Networking & HTTP Downloads
+  http: ^1.2.1
 
   # Security & Encryption
   cryptography: ^2.7.2
