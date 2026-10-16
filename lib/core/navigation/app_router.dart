@@ -13,10 +13,10 @@ final GlobalKey<NavigatorState> _searchNavigatorKey = GlobalKey<NavigatorState>(
 final GlobalKey<NavigatorState> _libraryNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _settingsNavigatorKey = GlobalKey<NavigatorState>();
 
-GoRouter createRouter(bool isAuthenticated) {
+GoRouter createRouter([bool isAuthenticated = true]) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: isAuthenticated ? '/home' : '/auth',
+    initialLocation: '/home',
     routes: [
       GoRoute(
         path: '/auth',

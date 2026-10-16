@@ -1,7 +1,7 @@
 class AppStrings {
   AppStrings._();
 
-  static const String appName = 'Wavely';
+  static const String appName = 'Spotify';
   
   // Navigation
   static const String navHome = 'Home';

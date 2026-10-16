@@ -9,30 +9,22 @@ import 'core/network/supabase_client.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase client
-  try {
-    await SupabaseConfig.initialize();
-  } catch (_) {
-    // Graceful offline fallback if keys not configured during test runs
-  }
-
   runApp(
     const ProviderScope(
-      child: WavelyApp(),
+      child: SpotifyApp(),
     ),
   );
 }
 
-class WavelyApp extends ConsumerWidget {
-  const WavelyApp({super.key});
+class SpotifyApp extends ConsumerWidget {
+  const SpotifyApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authControllerProvider);
-    final router = createRouter(authState.isAuthenticated);
+    final router = createRouter(true);
 
     return MaterialApp.router(
-      title: AppStrings.appName,
+      title: 'Spotify',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: router,
