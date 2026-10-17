@@ -9,6 +9,7 @@ import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/empty_view.dart';
 import '../shared_widgets/spotify_logo.dart';
 import '../../core/services/cloud_catalog_service.dart';
+import '../../core/services/online_music_search_service.dart';
 import '../playlist/playlist_detail_view.dart';
 
 class SearchView extends ConsumerStatefulWidget {
@@ -41,10 +42,16 @@ class _SearchViewState extends ConsumerState<SearchView> {
     });
   }
 
+  List<SongModel> _catalogResults = [];
+  List<SongModel> _onlineResults = [];
+
   Future<void> _performSearch(String query) async {
-    if (query.trim().isEmpty) {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) {
       setState(() {
         _results = [];
+        _catalogResults = [];
+        _onlineResults = [];
         _isLoading = false;
       });
       return;
@@ -55,12 +62,29 @@ class _SearchViewState extends ConsumerState<SearchView> {
     });
 
     final searchService = ref.read(cloudCatalogServiceProvider);
-    final results = await searchService.searchSongs(query);
+    final catalogMatches = await searchService.searchSongs(cleanQuery);
 
     if (mounted) {
       setState(() {
+        _catalogResults = catalogMatches;
+        _results = catalogMatches;
+      });
+    }
+
+    // Always fetch live online matches by song/movie name for new released songs
+    final onlineMatches = await OnlineMusicSearchService.searchOnline(cleanQuery);
+
+    if (mounted) {
+      // Deduplicate: avoid songs already matched in catalog by title and artist
+      final existingTitles = _catalogResults.map((s) => s.title.toLowerCase().trim()).toSet();
+      final filteredOnline = onlineMatches.where((s) {
+        return !existingTitles.contains(s.title.toLowerCase().trim());
+      }).toList();
+
+      setState(() {
+        _onlineResults = filteredOnline;
+        _results = [..._catalogResults, ..._onlineResults];
         _isLoading = false;
-        _results = results;
       });
     }
   }
@@ -271,24 +295,84 @@ class _SearchViewState extends ConsumerState<SearchView> {
                             subtitle: 'Please check your spelling or try another keyword.',
                             icon: Icons.music_off,
                           )
-                        : ListView.builder(
+                        : ListView(
                             key: const ValueKey('results_list'),
-                            itemCount: _results.length,
-                            itemBuilder: (context, index) {
-                              final song = _results[index];
-                              return SongTile(
-                                song: song,
-                                isPlaying: playerState.currentSong?.id == song.id,
-                                onTap: () {
-                                  _onSearchSubmitted(_searchController.text);
-                                  ref.read(audioPlayerControllerProvider.notifier).playSong(
-                                        song,
-                                        queue: _results,
-                                        index: index,
-                                      );
-                                },
-                              );
-                            },
+                            children: [
+                              if (_catalogResults.isNotEmpty) ...[
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.library_music, size: 16, color: AppColors.cyanAccent),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'In Your Releases & Library',
+                                        style: TextStyle(
+                                          color: AppColors.cyanAccent,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ..._catalogResults.asMap().entries.map((entry) {
+                                  final index = entry.key;
+                                  final song = entry.value;
+                                  return SongTile(
+                                    song: song,
+                                    isPlaying: playerState.currentSong?.id == song.id,
+                                    onTap: () {
+                                      _onSearchSubmitted(_searchController.text);
+                                      ref.read(audioPlayerControllerProvider.notifier).playSong(
+                                            song,
+                                            queue: _results,
+                                            index: index,
+                                          );
+                                    },
+                                  );
+                                }),
+                              ],
+                              if (_onlineResults.isNotEmpty) ...[
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(16, _catalogResults.isNotEmpty ? 18 : 10, 16, 6),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.public, size: 16, color: Color(0xFF38D6FF)),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'New Releases & Global Search',
+                                        style: TextStyle(
+                                          color: Color(0xFF38D6FF),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ..._onlineResults.asMap().entries.map((entry) {
+                                  final relIndex = entry.key;
+                                  final absIndex = _catalogResults.length + relIndex;
+                                  final song = entry.value;
+                                  return SongTile(
+                                    song: song,
+                                    isPlaying: playerState.currentSong?.id == song.id,
+                                    onTap: () {
+                                      _onSearchSubmitted(_searchController.text);
+                                      ref.read(audioPlayerControllerProvider.notifier).playSong(
+                                            song,
+                                            queue: _results,
+                                            index: absIndex,
+                                          );
+                                    },
+                                  );
+                                }),
+                              ],
+                              const SizedBox(height: Dimensions.space64),
+                            ],
                           ),
               ),
             ),
