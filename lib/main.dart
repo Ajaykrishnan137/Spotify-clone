@@ -18,7 +18,7 @@ void main() async {
       androidNotificationChannelName: 'Wavely Music Playback',
       androidNotificationChannelDescription: 'Active background playback controls and notification shade widget',
       androidNotificationOngoing: true,
-      androidStopForegroundOnPause: false,
+      androidStopForegroundOnPause: true,
       androidShowNotificationBadge: true,
       androidNotificationClickStartsActivity: true,
     ),
