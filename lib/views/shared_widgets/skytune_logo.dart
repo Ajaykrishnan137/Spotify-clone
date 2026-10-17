@@ -95,7 +95,8 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
       width: widget.size,
       height: widget.size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(widget.size * 0.24),
+        borderRadius: BorderRadius.circular(widget.size * 0.225),
+        gradient: AppColors.logoGradient,
         boxShadow: [
           BoxShadow(
             color: AppColors.primarySkyBlue.withOpacity(0.4),
@@ -105,24 +106,10 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(widget.size * 0.24),
-        child: Image.asset(
-          'assets/branding/icons/skytune_icon_512.png',
-          width: widget.size,
-          height: widget.size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            decoration: const BoxDecoration(
-              gradient: AppColors.logoGradient,
-            ),
-            child: Center(
-              child: CustomPaint(
-                size: Size(widget.size * 0.72, widget.size * 0.72),
-                painter: SkyTuneIconPainter(),
-              ),
-            ),
-          ),
+      child: Center(
+        child: CustomPaint(
+          size: Size(widget.size * 0.76, widget.size * 0.76),
+          painter: SkyTuneIconPainter(),
         ),
       ),
     );
@@ -162,13 +149,12 @@ class SkyTuneWordmark extends StatelessWidget {
   }
 }
 
-/// Custom painter for SkyTune's Geometric Soundwave 'S' pattern
+/// Custom painter for SkyTune's Geometric Soundwave 'S' pattern (matches skytune_icon.svg 1:1)
 class SkyTuneIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final s = w / 100.0;
+    // 512x512 reference coordinates scaled to canvas size
+    final s = size.width / 512.0;
 
     final whitePaint = Paint()
       ..color = Colors.white
@@ -177,53 +163,48 @@ class SkyTuneIconPainter extends CustomPainter {
     final arcPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.2 * s
+      ..strokeWidth = 16.0 * s
       ..strokeCap = StrokeCap.round;
 
-    // 5 Precision Vertical Equalizer Bars forming rhythm
-    // Bar 1 (Left Upper)
+    // 5 Precision Vertical Equalizer Bars matching skytune_icon.svg
+    // Bar 1 (Left Upper): x=130, y=160, w=32, h=130, rx=16
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(24 * s, 30 * s, 6.2 * s, 26 * s), Radius.circular(3.1 * s)),
+      RRect.fromRectAndRadius(Rect.fromLTWH(130 * s, 160 * s, 32 * s, 130 * s), Radius.circular(16 * s)),
       whitePaint,
     );
-    // Bar 2 (Peak Left)
+    // Bar 2 (Peak Left): x=185, y=115, w=32, h=220, rx=16
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(35 * s, 21 * s, 6.2 * s, 44 * s), Radius.circular(3.1 * s)),
+      RRect.fromRectAndRadius(Rect.fromLTWH(185 * s, 115 * s, 32 * s, 220 * s), Radius.circular(16 * s)),
       whitePaint,
     );
-    // Bar 3 (Center Pivot)
+    // Bar 3 (Center Pivot): x=240, y=180, w=32, h=152, rx=16
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(46 * s, 35 * s, 6.2 * s, 30 * s), Radius.circular(3.1 * s)),
+      RRect.fromRectAndRadius(Rect.fromLTWH(240 * s, 180 * s, 32 * s, 152 * s), Radius.circular(16 * s)),
       whitePaint,
     );
-    // Bar 4 (Peak Right)
+    // Bar 4 (Peak Right): x=295, y=175, w=32, h=220, rx=16
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(57 * s, 33 * s, 6.2 * s, 44 * s), Radius.circular(3.1 * s)),
+      RRect.fromRectAndRadius(Rect.fromLTWH(295 * s, 175 * s, 32 * s, 220 * s), Radius.circular(16 * s)),
       whitePaint,
     );
-    // Bar 5 (Right Lower)
+    // Bar 5 (Right Lower): x=350, y=220, w=32, h=130, rx=16
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(68 * s, 43 * s, 6.2 * s, 26 * s), Radius.circular(3.1 * s)),
+      RRect.fromRectAndRadius(Rect.fromLTWH(350 * s, 220 * s, 32 * s, 130 * s), Radius.circular(16 * s)),
       whitePaint,
     );
 
-    // Connecting sound frequency arcs forming the flow of 'S'
-    // Upper arc
-    canvas.drawArc(
-      Rect.fromLTWH(26 * s, 20 * s, 24 * s, 22 * s),
-      3.14,
-      3.14,
-      false,
-      arcPaint,
-    );
-    // Lower arc
-    canvas.drawArc(
-      Rect.fromLTWH(48 * s, 53 * s, 24 * s, 22 * s),
-      0,
-      3.14,
-      false,
-      arcPaint,
-    );
+    // Connecting sound frequency arcs matching skytune_icon.svg
+    // Upper arc: M 146 160 A 55 55 0 0 1 256 180
+    final upperArc = Path()
+      ..moveTo(146 * s, 160 * s)
+      ..arcToPoint(Offset(256 * s, 180 * s), radius: Radius.circular(55 * s), clockwise: true);
+    canvas.drawPath(upperArc, arcPaint);
+
+    // Lower arc: M 256 332 A 55 55 0 0 1 366 350
+    final lowerArc = Path()
+      ..moveTo(256 * s, 332 * s)
+      ..arcToPoint(Offset(366 * s, 350 * s), radius: Radius.circular(55 * s), clockwise: true);
+    canvas.drawPath(lowerArc, arcPaint);
   }
 
   @override

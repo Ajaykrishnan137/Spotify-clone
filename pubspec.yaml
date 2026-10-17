@@ -55,4 +55,4 @@ flutter:
     - assets/songs_cloud_catalog.json
     - assets/covers/
     - assets/branding/
-    - assets/branding/icons/
+    - assets/branding/svg/
