@@ -26,6 +26,12 @@ class PlaylistDetailView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playerState = ref.watch(audioPlayerControllerProvider);
+    final batchStatus = ref.watch(batchDownloadStatusStreamProvider).value ??
+        ref.read(downloadControllerProvider.notifier).currentBatchStatus;
+    final downloadTasks = ref.watch(downloadControllerProvider);
+
+    final allDownloaded = songs.isNotEmpty &&
+        songs.every((s) => downloadTasks[s.id]?.status == DownloadStatus.downloaded);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -71,6 +77,92 @@ class PlaylistDetailView extends ConsumerWidget {
               ),
             ),
           ),
+
+          // Download All active progress & control card
+          if (batchStatus.isBatchActive)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
+                padding: const EdgeInsets.all(Dimensions.space12),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
+                  border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.downloading, color: AppColors.accent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            batchStatus.isPaused
+                                ? 'Download paused (${batchStatus.completedCount}/${batchStatus.totalCount})'
+                                : 'Downloading ${batchStatus.completedCount}/${batchStatus.totalCount} tracks...',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        // Pause / Resume Button
+                        IconButton(
+                          icon: Icon(
+                            batchStatus.isPaused ? Icons.play_arrow : Icons.pause,
+                            color: AppColors.textPrimary,
+                            size: 22,
+                          ),
+                          tooltip: batchStatus.isPaused ? 'Resume' : 'Pause',
+                          onPressed: () {
+                            if (batchStatus.isPaused) {
+                              ref.read(downloadControllerProvider.notifier).resumeBatchDownload();
+                            } else {
+                              ref.read(downloadControllerProvider.notifier).pauseBatchDownload();
+                            }
+                          },
+                        ),
+                        // Cancel / Stop Button
+                        IconButton(
+                          icon: const Icon(Icons.stop_circle_outlined, color: AppColors.error, size: 24),
+                          tooltip: 'Stop & Cancel Download All',
+                          onPressed: () {
+                            ref.read(downloadControllerProvider.notifier).cancelBatchDownload();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Download stopped. Partial files deleted.'),
+                                backgroundColor: AppColors.surface,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: batchStatus.totalCount > 0
+                          ? (batchStatus.completedCount / batchStatus.totalCount).clamp(0.0, 1.0)
+                          : null,
+                      backgroundColor: AppColors.surface,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+                      minHeight: 4,
+                    ),
+                    if (batchStatus.currentSongTitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Current: ${batchStatus.currentSongTitle}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space12),
@@ -82,46 +174,50 @@ class PlaylistDetailView extends ConsumerWidget {
                       children: [
                         Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                         const SizedBox(height: 4),
-                        Text('${songs.length} songs', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                        Text(
+                          '${songs.length} songs',
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final downloadTasks = ref.watch(downloadControllerProvider);
-                      final allDownloaded = songs.isNotEmpty &&
-                          songs.every((s) => downloadTasks[s.id]?.status == DownloadStatus.downloaded);
-                      final isDownloadingAny =
-                          songs.any((s) => downloadTasks[s.id]?.status == DownloadStatus.downloading);
 
-                      return IconButton(
-                        icon: isDownloadingAny
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                              )
-                            : Icon(
-                                allDownloaded ? Icons.download_done : Icons.arrow_circle_down_rounded,
-                                color: allDownloaded ? AppColors.accent : AppColors.textSecondary,
-                                size: 28,
-                              ),
-                        tooltip: allDownloaded ? 'Playlist Downloaded' : 'Download Playlist',
-                        onPressed: () {
-                          if (!allDownloaded && !isDownloadingAny) {
-                            ref.read(downloadControllerProvider.notifier).downloadMultipleSongs(songs);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Downloading ${songs.length} songs for offline listening...'),
-                                duration: const Duration(seconds: 2),
-                                backgroundColor: AppColors.card,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
+                  // Download All or Stop button in action row
+                  if (batchStatus.isBatchActive)
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error.withOpacity(0.2),
+                        foregroundColor: AppColors.error,
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Cancel All'),
+                      onPressed: () {
+                        ref.read(downloadControllerProvider.notifier).cancelBatchDownload();
+                      },
+                    )
+                  else
+                    IconButton(
+                      icon: Icon(
+                        allDownloaded ? Icons.download_done : Icons.arrow_circle_down_rounded,
+                        color: allDownloaded ? AppColors.accent : AppColors.textSecondary,
+                        size: 28,
+                      ),
+                      tooltip: allDownloaded ? 'Playlist Downloaded' : 'Download all',
+                      onPressed: () {
+                        if (!allDownloaded) {
+                          ref.read(downloadControllerProvider.notifier).downloadMultipleSongs(songs);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Starting download of ${songs.length} songs...'),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: AppColors.card,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+
                   const SizedBox(width: Dimensions.space12),
                   FloatingActionButton(
                     backgroundColor: AppColors.accent,

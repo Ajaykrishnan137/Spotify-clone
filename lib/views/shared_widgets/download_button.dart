@@ -7,6 +7,7 @@ class DownloadButton extends StatelessWidget {
   final double progress;
   final VoidCallback onDownload;
   final VoidCallback onDelete;
+  final VoidCallback? onCancel;
 
   const DownloadButton({
     super.key,
@@ -14,6 +15,7 @@ class DownloadButton extends StatelessWidget {
     this.progress = 0.0,
     required this.onDownload,
     required this.onDelete,
+    this.onCancel,
   });
 
   @override
@@ -48,33 +50,43 @@ class DownloadButton extends StatelessWidget {
               ),
             );
           },
-          tooltip: 'Downloaded (Tap to manage)',
+          tooltip: 'Downloaded (Tap to remove)',
         );
       case DownloadStatus.downloading:
       case DownloadStatus.encrypting:
-        return SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            value: progress > 0 ? progress : null,
-            strokeWidth: 2.5,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
-          ),
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 2.5,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 14, color: AppColors.textSecondary),
+              tooltip: 'Cancel download',
+              onPressed: onCancel ?? onDelete,
+            ),
+          ],
         );
       case DownloadStatus.failed:
         return IconButton(
           icon: const Icon(Icons.refresh, color: AppColors.error),
           onPressed: onDownload,
-          tooltip: 'Retry download',
+          tooltip: 'Download failed. Tap to retry',
         );
-      case DownloadStatus.notDownloaded:
       case DownloadStatus.canceled:
+      case DownloadStatus.notDownloaded:
       case DownloadStatus.enqueued:
       default:
         return IconButton(
           icon: const Icon(Icons.arrow_downward, color: AppColors.textSecondary),
           onPressed: onDownload,
-          tooltip: 'Download',
+          tooltip: 'Download for offline play',
         );
     }
   }

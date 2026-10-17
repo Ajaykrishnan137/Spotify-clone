@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,38 @@ import '../core/network/connectivity_service.dart';
 import 'playlist_controller.dart';
 import 'audio_player_controller.dart';
 
+class BatchDownloadStatus {
+  final bool isBatchActive;
+  final bool isPaused;
+  final int completedCount;
+  final int totalCount;
+  final String? currentSongTitle;
+
+  const BatchDownloadStatus({
+    this.isBatchActive = false,
+    this.isPaused = false,
+    this.completedCount = 0,
+    this.totalCount = 0,
+    this.currentSongTitle,
+  });
+
+  BatchDownloadStatus copyWith({
+    bool? isBatchActive,
+    bool? isPaused,
+    int? completedCount,
+    int? totalCount,
+    String? currentSongTitle,
+  }) {
+    return BatchDownloadStatus(
+      isBatchActive: isBatchActive ?? this.isBatchActive,
+      isPaused: isPaused ?? this.isPaused,
+      completedCount: completedCount ?? this.completedCount,
+      totalCount: totalCount ?? this.totalCount,
+      currentSongTitle: currentSongTitle ?? this.currentSongTitle,
+    );
+  }
+}
+
 class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   final SupabaseSongsRepository _songsRepo;
   final SongsDao _songsDao;
@@ -23,6 +56,24 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   final FileCipher _fileCipher = FileCipher();
   final IntegrityService _integrityService = IntegrityService();
   final ConnectivityService _connectivityService;
+
+  // Active cancellation token map per songId
+  final Map<String, http.Client> _activeClients = {};
+  final Map<String, File> _activeTempFiles = {};
+
+  // Batch download queue
+  final List<SongModel> _batchQueue = [];
+  bool _isBatchCancelled = false;
+  bool _isBatchPaused = false;
+  int _batchTotal = 0;
+  int _batchCompleted = 0;
+
+  // Stream controller for batch status
+  final StreamController<BatchDownloadStatus> _batchStatusController =
+      StreamController<BatchDownloadStatus>.broadcast();
+  Stream<BatchDownloadStatus> get batchStatusStream => _batchStatusController.stream;
+  BatchDownloadStatus _currentBatchStatus = const BatchDownloadStatus();
+  BatchDownloadStatus get currentBatchStatus => _currentBatchStatus;
 
   bool _wifiOnly = false;
   bool get wifiOnly => _wifiOnly;
@@ -57,6 +108,10 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     _wifiOnly = value;
   }
 
+  void _notifyBatchStatus() {
+    _batchStatusController.add(_currentBatchStatus);
+  }
+
   void _updateProgress(String songId, double progress) {
     final current = state[songId] ?? DownloadTaskState(songId: songId);
     final updated = current.copyWith(
@@ -80,7 +135,7 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
       }
     }
 
-    _updateProgress(song.id, 0.1);
+    _updateProgress(song.id, 0.05);
 
     // 1. Fetch streaming or signed URL
     final res = await _songsRepo.getSignedAudioUrl(song.storagePath);
@@ -97,10 +152,13 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     final url = res.dataOrNull!;
     final tempDir = await getTemporaryDirectory();
     final tempFile = File(p.join(tempDir.path, '${song.id}_temp.mp3'));
+    _activeTempFiles[song.id] = tempFile;
+
+    final client = http.Client();
+    _activeClients[song.id] = client;
 
     try {
-      _updateProgress(song.id, 0.3);
-      final client = http.Client();
+      _updateProgress(song.id, 0.15);
       final request = http.Request('GET', Uri.parse(url));
       final response = await client.send(request);
 
@@ -109,22 +167,43 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
         int receivedBytes = 0;
         final sink = tempFile.openWrite();
 
-        await response.stream.listen((chunk) {
-          sink.add(chunk);
-          receivedBytes += chunk.length;
-          if (totalBytes > 0) {
-            _updateProgress(song.id, 0.3 + (0.5 * (receivedBytes / totalBytes)));
-          }
-        }).asFuture();
+        await response.stream.listen(
+          (chunk) {
+            sink.add(chunk);
+            receivedBytes += chunk.length;
+            if (totalBytes > 0) {
+              _updateProgress(song.id, 0.15 + (0.75 * (receivedBytes / totalBytes)));
+            }
+          },
+          cancelOnError: true,
+        ).asFuture();
 
         await sink.close();
-        client.close();
+        _activeClients.remove(song.id);
 
-        await _processDownloadedFile(song, tempFile);
+        if (_activeTempFiles.containsKey(song.id)) {
+          await _processDownloadedFile(song, tempFile);
+        }
       } else {
         throw Exception('Download failed with status ${response.statusCode}');
       }
     } catch (e) {
+      _activeClients.remove(song.id);
+      _activeTempFiles.remove(song.id);
+
+      // Clean up partial temp file
+      if (tempFile.existsSync()) {
+        try {
+          tempFile.deleteSync();
+        } catch (_) {}
+      }
+
+      // If intentionally canceled, mark as canceled
+      final current = state[song.id];
+      if (current?.status == DownloadStatus.canceled) {
+        return;
+      }
+
       state = {
         ...state,
         song.id: DownloadTaskState(
@@ -133,14 +212,13 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
           error: e.toString(),
         )
       };
-      if (tempFile.existsSync()) tempFile.deleteSync();
     }
   }
 
   Future<void> _processDownloadedFile(SongModel songModel, File tempFile) async {
     final songId = songModel.id;
     final cur = state[songId] ?? DownloadTaskState(songId: songId);
-    state = {...state, songId: cur.copyWith(status: DownloadStatus.encrypting, progress: 0.9)};
+    state = {...state, songId: cur.copyWith(status: DownloadStatus.encrypting, progress: 0.95)};
 
     if (!tempFile.existsSync()) return;
 
@@ -157,6 +235,7 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
           songId: cur.copyWith(status: DownloadStatus.failed, error: 'SHA-256 Integrity check failed'),
         };
         if (tempFile.existsSync()) tempFile.deleteSync();
+        _activeTempFiles.remove(songId);
         return;
       }
     }
@@ -178,6 +257,7 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     if (tempFile.existsSync()) {
       tempFile.deleteSync();
     }
+    _activeTempFiles.remove(songId);
 
     // 4. Update local SQLite DB
     await _songsDao.markDownloaded(songId, targetFile.path);
@@ -191,16 +271,122 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
     await _tasksDao.upsertTask(completeState);
   }
 
-  Future<void> downloadMultipleSongs(List<SongModel> songs) async {
-    for (final song in songs) {
-      final cur = state[song.id]?.status;
-      if (cur != DownloadStatus.downloaded && cur != DownloadStatus.downloading) {
-        await startDownload(song);
+  /// Cancel individual track download and clean up partial files
+  void cancelTrackDownload(String songId) {
+    if (_activeClients.containsKey(songId)) {
+      _activeClients[songId]?.close();
+      _activeClients.remove(songId);
+    }
+    if (_activeTempFiles.containsKey(songId)) {
+      final tempFile = _activeTempFiles.remove(songId);
+      if (tempFile != null && tempFile.existsSync()) {
+        try {
+          tempFile.deleteSync();
+        } catch (_) {}
       }
     }
+    state = {
+      ...state,
+      songId: DownloadTaskState(
+        songId: songId,
+        status: DownloadStatus.canceled,
+        progress: 0.0,
+      ),
+    };
+  }
+
+  /// Download multiple songs with full cancel and pause/resume support
+  Future<void> downloadMultipleSongs(List<SongModel> songs) async {
+    _isBatchCancelled = false;
+    _isBatchPaused = false;
+    _batchQueue.clear();
+    
+    // Only queue songs that aren't already downloaded
+    for (final s in songs) {
+      if (state[s.id]?.status != DownloadStatus.downloaded) {
+        _batchQueue.add(s);
+      }
+    }
+
+    _batchTotal = _batchQueue.length;
+    _batchCompleted = 0;
+
+    _currentBatchStatus = BatchDownloadStatus(
+      isBatchActive: true,
+      isPaused: false,
+      completedCount: 0,
+      totalCount: _batchTotal,
+      currentSongTitle: _batchQueue.isNotEmpty ? _batchQueue.first.title : null,
+    );
+    _notifyBatchStatus();
+
+    while (_batchQueue.isNotEmpty && !_isBatchCancelled) {
+      if (_isBatchPaused) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        continue;
+      }
+
+      final song = _batchQueue.removeAt(0);
+      _currentBatchStatus = _currentBatchStatus.copyWith(
+        currentSongTitle: song.title,
+        completedCount: _batchCompleted,
+      );
+      _notifyBatchStatus();
+
+      await startDownload(song);
+
+      if (!_isBatchCancelled) {
+        _batchCompleted++;
+        _currentBatchStatus = _currentBatchStatus.copyWith(
+          completedCount: _batchCompleted,
+        );
+        _notifyBatchStatus();
+      }
+    }
+
+    _currentBatchStatus = _currentBatchStatus.copyWith(
+      isBatchActive: false,
+      isPaused: false,
+    );
+    _notifyBatchStatus();
+  }
+
+  /// Cancel all ongoing downloads: stops current file, deletes partial file, clears remaining queue
+  void cancelBatchDownload() {
+    _isBatchCancelled = true;
+    _batchQueue.clear();
+
+    // Abort all active downloads and purge partial files
+    for (final songId in _activeClients.keys.toList()) {
+      cancelTrackDownload(songId);
+    }
+
+    _currentBatchStatus = const BatchDownloadStatus(
+      isBatchActive: false,
+      isPaused: false,
+      completedCount: 0,
+      totalCount: 0,
+    );
+    _notifyBatchStatus();
+  }
+
+  /// Pause ongoing batch download
+  void pauseBatchDownload() {
+    _isBatchPaused = true;
+    _currentBatchStatus = _currentBatchStatus.copyWith(isPaused: true);
+    _notifyBatchStatus();
+  }
+
+  /// Resume ongoing batch download
+  void resumeBatchDownload() {
+    _isBatchPaused = false;
+    _currentBatchStatus = _currentBatchStatus.copyWith(isPaused: false);
+    _notifyBatchStatus();
   }
 
   Future<void> deleteDownload(String songId) async {
+    cancelTrackDownload(songId);
+
     final appDocDir = await getApplicationDocumentsDirectory();
     final f1 = File(p.join(appDocDir.path, 'offline_music', '$songId.mp3'));
     if (f1.existsSync()) f1.deleteSync();
@@ -218,6 +404,8 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   }
 
   Future<void> deleteAllDownloads() async {
+    cancelBatchDownload();
+
     final appDocDir = await getApplicationDocumentsDirectory();
     final offlineDir = Directory(p.join(appDocDir.path, 'offline_music'));
     if (offlineDir.existsSync()) {
@@ -250,4 +438,9 @@ final downloadControllerProvider =
     keyManager: ref.watch(keyManagerProvider),
     connectivityService: ref.watch(connectivityServiceProvider),
   );
+});
+
+final batchDownloadStatusStreamProvider = StreamProvider<BatchDownloadStatus>((ref) {
+  final controller = ref.watch(downloadControllerProvider.notifier);
+  return controller.batchStatusStream;
 });

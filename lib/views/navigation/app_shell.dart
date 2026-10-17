@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/connectivity_service.dart';
+import '../../core/services/state_persistence_service.dart';
+import '../../controllers/audio_player_controller.dart';
 import '../shared_widgets/spotify_logo.dart';
 import 'mini_player.dart';
 
@@ -10,6 +12,13 @@ class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
+
+  static const List<String> _branchRoutes = [
+    '/home',
+    '/search',
+    '/library',
+    '/settings',
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +42,7 @@ class AppShell extends ConsumerWidget {
                   Icon(Icons.cloud_off, size: 14, color: Colors.white),
                   SizedBox(width: 6),
                   Text(
-                    'Offline Mode — Playing downloaded music',
+                    'Offline Mode — Playing downloaded music only',
                     style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -46,10 +55,27 @@ class AppShell extends ConsumerWidget {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: navigationShell.currentIndex,
-        onTap: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
-        ),
+        onTap: (index) {
+          navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
+          );
+          // Persist the current screen selection
+          if (index >= 0 && index < _branchRoutes.length) {
+            final route = _branchRoutes[index];
+            final playerState = ref.read(audioPlayerControllerProvider);
+            ref.read(statePersistenceServiceProvider).saveState(
+              AppSavedState(
+                currentSong: playerState.currentSong,
+                positionMs: playerState.position.inMilliseconds,
+                queue: playerState.queue,
+                currentIndex: playerState.currentIndex,
+                currentRoute: route,
+                recentlyPlayed: playerState.recentlyPlayed,
+              ),
+            );
+          }
+        },
         backgroundColor: AppColors.surface,
         selectedItemColor: AppColors.accent,
         unselectedItemColor: AppColors.textSecondary,

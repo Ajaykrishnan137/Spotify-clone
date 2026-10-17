@@ -4,6 +4,7 @@ import '../../models/song_model.dart';
 import '../../models/download_state.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/playlist_controller.dart';
+import '../../controllers/audio_player_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import 'app_image.dart';
@@ -41,10 +42,42 @@ class SongTile extends ConsumerWidget {
               children: [
                 ListTile(
                   leading: AppImage(url: song.coverUrl, width: 44, height: 44),
-                  title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                  subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textSecondary)),
+                  title: Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  subtitle: Text(
+                    song.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
                 ),
                 const Divider(color: AppColors.card),
+                ListTile(
+                  leading: const Icon(Icons.playlist_play, color: AppColors.textPrimary),
+                  title: const Text('Play Next', style: TextStyle(color: AppColors.textPrimary)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(audioPlayerControllerProvider.notifier).playNext(song);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Playing next: "${song.title}"'), backgroundColor: AppColors.accent),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.queue_music, color: AppColors.textPrimary),
+                  title: const Text('Add to Queue', style: TextStyle(color: AppColors.textPrimary)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(audioPlayerControllerProvider.notifier).addToQueue(song);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Added to queue: "${song.title}"'), backgroundColor: AppColors.accent),
+                    );
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.playlist_add, color: AppColors.textPrimary),
                   title: const Text('Add to Playlist', style: TextStyle(color: AppColors.textPrimary)),
@@ -206,6 +239,7 @@ class SongTile extends ConsumerWidget {
                     progress: task.progress,
                     onDownload: () => ref.read(downloadControllerProvider.notifier).startDownload(song),
                     onDelete: () => ref.read(downloadControllerProvider.notifier).deleteDownload(song.id),
+                    onCancel: () => ref.read(downloadControllerProvider.notifier).cancelTrackDownload(song.id),
                   ),
                   IconButton(
                     icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),

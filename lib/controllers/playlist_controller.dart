@@ -54,6 +54,31 @@ class LocalPlaylistController extends StateNotifier<AsyncValue<List<PlaylistMode
     await loadPlaylists();
   }
 
+  Future<void> renamePlaylist(String id, String newName) async {
+    final list = state.value ?? [];
+    final existing = list.firstWhere((p) => p.id == id, orElse: () => PlaylistModel(
+      id: id,
+      ownerId: 'local-user',
+      name: newName,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    ));
+
+    final updated = PlaylistModel(
+      id: existing.id,
+      ownerId: existing.ownerId,
+      name: newName,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.now(),
+      coverUrl: existing.coverUrl,
+      isLikedSongs: existing.isLikedSongs,
+      songCount: existing.songCount,
+    );
+
+    await _playlistsDao.upsertPlaylist(updated);
+    await loadPlaylists();
+  }
+
   Future<void> deletePlaylist(String id) async {
     await _playlistsDao.deletePlaylist(id);
     await loadPlaylists();
@@ -61,6 +86,11 @@ class LocalPlaylistController extends StateNotifier<AsyncValue<List<PlaylistMode
 
   Future<void> addSongToPlaylist(String playlistId, SongModel song) async {
     await _playlistsDao.addSongToPlaylist(playlistId, song.id, DateTime.now().millisecondsSinceEpoch);
+    await loadPlaylists();
+  }
+
+  Future<void> removeSongFromPlaylist(String playlistId, String songId) async {
+    await _playlistsDao.removeSongFromPlaylist(playlistId, songId);
     await loadPlaylists();
   }
 

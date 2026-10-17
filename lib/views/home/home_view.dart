@@ -87,17 +87,65 @@ class HomeView extends ConsumerWidget {
                   genres.putIfAbsent(song.genre, () => []).add(song);
                 }
 
-                final featuredSongs = songs.take(12).toList();
+                final recentlyPlayedList = playerState.recentlyPlayed;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Quick Mix Shelf
+                    // 1. RECENTLY PLAYED Horizontal Row (Newest first, max 20, deduplicated)
+                    if (recentlyPlayedList.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Dimensions.space16,
+                          Dimensions.space12,
+                          Dimensions.space16,
+                          Dimensions.space8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.history, size: 20, color: AppColors.accent),
+                            const SizedBox(width: 8),
+                            Text(
+                              AppStrings.recentlyPlayed,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: Dimensions.songCardHeight,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16),
+                          itemCount: recentlyPlayedList.length,
+                          itemBuilder: (context, index) {
+                            final song = recentlyPlayedList[index];
+                            return SongCard(
+                              song: song,
+                              onTap: () {
+                                ref.read(audioPlayerControllerProvider.notifier).playSong(
+                                      song,
+                                      queue: recentlyPlayedList,
+                                      index: index,
+                                    );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: Dimensions.space16),
+                    ],
+
+                    // 2. Quick Picks / Featured Horizontal Row
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
                       child: Text(
-                        AppStrings.recentlyPlayed,
-                        style: Theme.of(context).textTheme.titleLarge,
+                        AppStrings.madeForYou,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                     ),
                     SizedBox(
@@ -105,15 +153,15 @@ class HomeView extends ConsumerWidget {
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16),
-                        itemCount: featuredSongs.length,
+                        itemCount: songs.take(12).length,
                         itemBuilder: (context, index) {
-                          final song = featuredSongs[index];
+                          final song = songs[index];
                           return SongCard(
                             song: song,
                             onTap: () {
                               ref.read(audioPlayerControllerProvider.notifier).playSong(
                                     song,
-                                    queue: featuredSongs,
+                                    queue: songs.take(12).toList(),
                                     index: index,
                                   );
                             },
@@ -123,7 +171,7 @@ class HomeView extends ConsumerWidget {
                     ),
                     const SizedBox(height: Dimensions.space24),
 
-                    // Render sections for each folder / genre
+                    // 3. Render sections for each folder / genre
                     ...genres.entries.map((entry) {
                       final category = entry.key;
                       final categorySongs = entry.value;
@@ -140,7 +188,7 @@ class HomeView extends ConsumerWidget {
                                   MaterialPageRoute(
                                     builder: (_) => PlaylistDetailView(
                                       title: category.toUpperCase(),
-                                      subtitle: 'Folder Collection',
+                                      subtitle: 'Legal Music Collection',
                                       coverUrl: categorySongs.isNotEmpty ? categorySongs.first.coverUrl : null,
                                       songs: categorySongs,
                                     ),
@@ -172,7 +220,7 @@ class HomeView extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          ...categorySongs.take(8).map(
+                          ...categorySongs.take(6).map(
                             (song) => SongTile(
                               song: song,
                               isPlaying: playerState.currentSong?.id == song.id,
