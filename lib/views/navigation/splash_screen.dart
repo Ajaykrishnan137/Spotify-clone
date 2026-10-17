@@ -71,7 +71,7 @@ class _SplashScreenState extends State<SplashScreen>
                 SkyTuneWordmark(fontSize: 32),
                 SizedBox(height: 8),
                 Text(
-                  'Cloud Harmony & Streaming',
+                  'Legal Music Streaming & Offline Audio',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,

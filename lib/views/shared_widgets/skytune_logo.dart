@@ -96,7 +96,6 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
       height: widget.size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(widget.size * 0.24),
-        gradient: AppColors.logoGradient,
         boxShadow: [
           BoxShadow(
             color: AppColors.primarySkyBlue.withOpacity(0.4),
@@ -106,10 +105,24 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
           ),
         ],
       ),
-      child: Center(
-        child: CustomPaint(
-          size: Size(widget.size * 0.72, widget.size * 0.72),
-          painter: SkyTuneIconPainter(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(widget.size * 0.24),
+        child: Image.asset(
+          'assets/branding/icons/skytune_icon_512.png',
+          width: widget.size,
+          height: widget.size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            decoration: const BoxDecoration(
+              gradient: AppColors.logoGradient,
+            ),
+            child: Center(
+              child: CustomPaint(
+                size: Size(widget.size * 0.72, widget.size * 0.72),
+                painter: SkyTuneIconPainter(),
+              ),
+            ),
+          ),
         ),
       ),
     );
