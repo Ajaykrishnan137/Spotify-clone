@@ -40,7 +40,7 @@ class EmptyView extends StatelessWidget {
               ),
               child: const Center(
                 child: Icon(
-                  Icons.cloud_queue_rounded,
+                  Icons.graphic_eq_rounded,
                   size: 44,
                   color: Colors.white,
                 ),

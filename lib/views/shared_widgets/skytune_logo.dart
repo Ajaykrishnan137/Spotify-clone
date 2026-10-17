@@ -149,72 +149,67 @@ class SkyTuneWordmark extends StatelessWidget {
   }
 }
 
-/// Custom painter for SkyTune's original Cloud + Soundwave motif
+/// Custom painter for SkyTune's Geometric Soundwave 'S' pattern
 class SkyTuneIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final s = w / 100.0; // scale factor based on 100x100 reference
+    final s = w / 100.0;
 
     final whitePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
-    final sunPaint = Paint()
-      ..color = AppColors.softGold
-      ..style = PaintingStyle.fill;
+    final arcPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2 * s
+      ..strokeCap = StrokeCap.round;
 
-    // 1. Crescent Sun accent top-right
-    final sunPath = Path()
-      ..addArc(Rect.fromCircle(center: Offset(74 * s, 26 * s), radius: 6 * s), 0, 6.28);
-    canvas.drawPath(sunPath, sunPaint);
-
-    // 2. Sound Wave Bars rising from the cloud (4 rounded bars)
-    // Bar 1
+    // 5 Precision Vertical Equalizer Bars forming rhythm
+    // Bar 1 (Left Upper)
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(34 * s, 36 * s, 5.5 * s, 20 * s),
-        Radius.circular(3 * s),
-      ),
+      RRect.fromRectAndRadius(Rect.fromLTWH(24 * s, 30 * s, 6.2 * s, 26 * s), Radius.circular(3.1 * s)),
       whitePaint,
     );
-    // Bar 2 (tallest)
+    // Bar 2 (Peak Left)
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(44 * s, 24 * s, 5.5 * s, 32 * s),
-        Radius.circular(3 * s),
-      ),
+      RRect.fromRectAndRadius(Rect.fromLTWH(35 * s, 21 * s, 6.2 * s, 44 * s), Radius.circular(3.1 * s)),
       whitePaint,
     );
-    // Bar 3
+    // Bar 3 (Center Pivot)
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(54 * s, 30 * s, 5.5 * s, 26 * s),
-        Radius.circular(3 * s),
-      ),
+      RRect.fromRectAndRadius(Rect.fromLTWH(46 * s, 35 * s, 6.2 * s, 30 * s), Radius.circular(3.1 * s)),
       whitePaint,
     );
-    // Bar 4
+    // Bar 4 (Peak Right)
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(64 * s, 40 * s, 5.5 * s, 16 * s),
-        Radius.circular(3 * s),
-      ),
+      RRect.fromRectAndRadius(Rect.fromLTWH(57 * s, 33 * s, 6.2 * s, 44 * s), Radius.circular(3.1 * s)),
+      whitePaint,
+    );
+    // Bar 5 (Right Lower)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(68 * s, 43 * s, 6.2 * s, 26 * s), Radius.circular(3.1 * s)),
       whitePaint,
     );
 
-    // 3. Modern Cloud Base
-    canvas.drawCircle(Offset(28 * s, 64 * s), 12 * s, whitePaint);
-    canvas.drawCircle(Offset(44 * s, 56 * s), 16 * s, whitePaint);
-    canvas.drawCircle(Offset(60 * s, 58 * s), 14 * s, whitePaint);
-    canvas.drawCircle(Offset(74 * s, 64 * s), 11 * s, whitePaint);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(26 * s, 62 * s, 50 * s, 14 * s),
-        Radius.circular(6 * s),
-      ),
-      whitePaint,
+    // Connecting sound frequency arcs forming the flow of 'S'
+    // Upper arc
+    canvas.drawArc(
+      Rect.fromLTWH(26 * s, 20 * s, 24 * s, 22 * s),
+      3.14,
+      3.14,
+      false,
+      arcPaint,
+    );
+    // Lower arc
+    canvas.drawArc(
+      Rect.fromLTWH(48 * s, 53 * s, 24 * s, 22 * s),
+      0,
+      3.14,
+      false,
+      arcPaint,
     );
   }
 

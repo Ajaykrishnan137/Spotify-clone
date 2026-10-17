@@ -35,8 +35,8 @@ class AppImage extends StatelessWidget {
           ),
           child: Center(
             child: Icon(
-              Icons.cloud,
-              color: Colors.white.withOpacity(0.85),
+              Icons.graphic_eq_rounded,
+              color: Colors.white.withOpacity(0.9),
               size: (width != null && width! < 60) ? 22 : 36,
             ),
           ),
