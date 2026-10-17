@@ -6,6 +6,7 @@ import 'core/constants/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'core/audio/audio_player_handler.dart';
 import 'core/services/state_persistence_service.dart';
+import 'controllers/audio_player_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +47,7 @@ class SpotifyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = createRouter(true, initialLocation: initialRoute);
+    final router = createRouter(initialLocation: initialRoute);
 
     return MaterialApp.router(
       title: 'SkyTune',

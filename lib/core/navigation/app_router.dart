@@ -13,7 +13,7 @@ final GlobalKey<NavigatorState> _searchNavigatorKey = GlobalKey<NavigatorState>(
 final GlobalKey<NavigatorState> _libraryNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _settingsNavigatorKey = GlobalKey<NavigatorState>();
 
-GoRouter createRouter([bool isAuthenticated = true, {String initialLocation = '/home'}]) {
+GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/home'}) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: initialLocation,
