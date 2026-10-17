@@ -29,17 +29,9 @@ class HomeView extends ConsumerWidget {
             backgroundColor: AppColors.background,
             title: const Row(
               children: [
-                SpotifyDynamicLogo(size: 32),
+                SkyTuneDynamicLogo(size: 32),
                 SizedBox(width: 12),
-                Text(
-                  'SkyTune',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
+                SkyTuneWordmark(fontSize: 22),
               ],
             ),
             actions: [

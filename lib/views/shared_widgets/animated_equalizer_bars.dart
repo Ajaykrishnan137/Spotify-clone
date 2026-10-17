@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Animated 4-bar equalizer that pulses dynamically just like the Spotify app
+/// SkyTune animated 4-bar soundwave equalizer that pulses dynamically during playback
 class AnimatedEqualizerBars extends StatefulWidget {
   final Color color;
   final double size;

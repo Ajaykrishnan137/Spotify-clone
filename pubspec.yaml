@@ -1,5 +1,5 @@
 name: wavely
-description: "A production-grade, Spotify-style music streaming and offline-download app."
+description: "SkyTune - A production-grade music streaming and offline-download app."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -54,3 +54,5 @@ flutter:
   assets:
     - assets/songs_cloud_catalog.json
     - assets/covers/
+    - assets/branding/
+    - assets/branding/icons/

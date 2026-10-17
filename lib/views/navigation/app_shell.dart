@@ -77,7 +77,7 @@ class AppShell extends ConsumerWidget {
           }
         },
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.accent,
+        selectedItemColor: AppColors.cyanAccent,
         unselectedItemColor: AppColors.textSecondary,
         items: const [
           BottomNavigationBarItem(

@@ -24,12 +24,29 @@ class EmptyView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 64,
-              color: AppColors.textSecondary,
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppColors.logoGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primarySkyBlue.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.cloud_queue_rounded,
+                  size: 44,
+                  color: Colors.white,
+                ),
+              ),
             ),
-            const SizedBox(height: Dimensions.space16),
+            const SizedBox(height: Dimensions.space20),
             Text(
               title,
               textAlign: TextAlign.center,

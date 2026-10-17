@@ -114,14 +114,16 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            effectiveColor.withOpacity(0.85),
-            AppColors.background,
+            Color(0xFF1E90FF), // Primary Sky Blue
+            Color(0xFF5B4BFF), // Deep Blue/Purple
+            AppColors.deepNightBlue,
           ],
+          stops: [0.0, 0.45, 0.85],
         ),
       ),
       child: SafeArea(
@@ -247,13 +249,13 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ),
                       // Like button (toggles liked playlist)
                       IconButton(
-                        icon: const Icon(Icons.favorite_border, color: AppColors.textPrimary, size: 26),
+                        icon: const Icon(Icons.favorite, color: AppColors.sunsetCoral, size: 28),
                         tooltip: 'Like Song',
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Added "${song.title}" to Liked Songs'),
-                              backgroundColor: AppColors.accent,
+                              backgroundColor: AppColors.sunsetCoral,
                               duration: const Duration(seconds: 1),
                             ),
                           );
@@ -264,12 +266,12 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                 ],
               ),
               const SizedBox(height: Dimensions.space16),
-              // Progress Slider
+              // Progress Slider (Cyan Accent)
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                   overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                  activeTrackColor: effectiveColor,
+                  activeTrackColor: AppColors.cyanAccent,
                   inactiveTrackColor: AppColors.textSecondary.withOpacity(0.3),
                   thumbColor: Colors.white,
                 ),

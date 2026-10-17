@@ -26,8 +26,20 @@ class AppImage extends StatelessWidget {
         Container(
           width: width,
           height: height,
-          color: AppColors.card,
-          child: const Icon(Icons.music_note, color: AppColors.textSecondary, size: 24),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1E90FF), Color(0xFF5B4BFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.cloud,
+              color: Colors.white.withOpacity(0.85),
+              size: (width != null && width! < 60) ? 22 : 36,
+            ),
+          ),
         );
 
     Widget imageWidget;

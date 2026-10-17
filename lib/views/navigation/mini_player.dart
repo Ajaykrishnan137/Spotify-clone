@@ -130,7 +130,7 @@ class MiniPlayer extends ConsumerWidget {
             LinearProgressIndicator(
               value: progress,
               backgroundColor: AppColors.surface,
-              valueColor: AlwaysStoppedAnimation<Color>(themeColor),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyanAccent),
               minHeight: 2.5,
             ),
           ],
