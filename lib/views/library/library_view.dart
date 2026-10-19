@@ -10,6 +10,7 @@ import '../../core/services/cloud_catalog_service.dart';
 import '../shared_widgets/empty_view.dart';
 import '../shared_widgets/app_image.dart';
 import '../playlist/playlist_detail_view.dart';
+import 'downloaded_songs_view.dart';
 
 class LibraryView extends ConsumerStatefulWidget {
   const LibraryView({super.key});
@@ -19,7 +20,14 @@ class LibraryView extends ConsumerStatefulWidget {
 }
 
 class _LibraryViewState extends ConsumerState<LibraryView> {
-  bool _filterDownloadedOnly = false;
+  void _openDownloadedView() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const DownloadedSongsView(),
+      ),
+    );
+  }
 
   void _showCreatePlaylistDialog() {
     final textController = TextEditingController();
@@ -162,31 +170,25 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       ),
       body: Column(
         children: [
-          // Filter Chips (Playlists, Downloaded)
+          // Filter Chips (Downloaded)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 4),
             child: Row(
               children: [
-                FilterChip(
+                ActionChip(
                   label: const Text('Downloaded'),
-                  avatar: Icon(
+                  avatar: const Icon(
                     Icons.arrow_circle_down,
-                    size: 16,
-                    color: _filterDownloadedOnly ? Colors.black : AppColors.accent,
+                    size: 18,
+                    color: AppColors.cyanAccent,
                   ),
-                  selected: _filterDownloadedOnly,
-                  selectedColor: AppColors.accent,
                   backgroundColor: AppColors.card,
-                  labelStyle: TextStyle(
-                    color: _filterDownloadedOnly ? Colors.black : AppColors.textPrimary,
+                  labelStyle: const TextStyle(
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                    fontSize: 13,
                   ),
-                  onSelected: (val) {
-                    setState(() {
-                      _filterDownloadedOnly = val;
-                    });
-                  },
+                  onPressed: _openDownloadedView,
                 ),
               ],
             ),
@@ -196,13 +198,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
               error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.red))),
               data: (allSongs) {
-                // If offline or downloaded filter active
-                final songsToShow = _filterDownloadedOnly
-                    ? allSongs.where((s) => s.isDownloaded).toList()
-                    : allSongs;
-
                 final categories = <String, List<SongModel>>{};
-                for (final song in songsToShow) {
+                for (final song in allSongs) {
                   categories.putIfAbsent(song.genre, () => []).add(song);
                 }
 
@@ -211,6 +208,31 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 return ListView(
                   padding: const EdgeInsets.symmetric(vertical: Dimensions.space8),
                   children: [
+                    // Downloaded Songs item
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
+                      leading: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1E90FF), Color(0xFF38D6FF)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: const Icon(Icons.download_done_rounded, color: Colors.white, size: 28),
+                      ),
+                      title: const Text(
+                        'Downloaded',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 16),
+                      ),
+                      subtitle: const Text('Offline Music • Stored on device', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary),
+                      onTap: _openDownloadedView,
+                    ),
+
                     // Liked Songs item
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
@@ -239,7 +261,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             builder: (_) => PlaylistDetailView(
                               title: AppStrings.likedSongs,
                               subtitle: 'Your favorite tracks',
-                              songs: songsToShow.take(20).toList(),
+                              songs: allSongs.take(20).toList(),
                             ),
                           ),
                         );
@@ -325,6 +347,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                     subtitle: 'Custom Playlist',
                                     coverUrl: songs.isNotEmpty ? songs.first.coverUrl : null,
                                     songs: songs,
+                                    playlistId: pl.id,
                                   ),
                                 ),
                               );

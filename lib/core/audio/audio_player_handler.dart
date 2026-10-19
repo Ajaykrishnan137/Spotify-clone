@@ -85,6 +85,10 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
+  // Callbacks hooked to the shared AudioPlayerController
+  Future<void> Function()? onSkipToNext;
+  Future<void> Function()? onSkipToPrevious;
+
   @override
   Future<void> updateMediaItem(MediaItem item) async {
     mediaItem.add(item);
@@ -111,12 +115,16 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    // Handled by controller hook or custom action
+    if (onSkipToNext != null) {
+      await onSkipToNext!();
+    }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    // Handled by controller hook or custom action
+    if (onSkipToPrevious != null) {
+      await onSkipToPrevious!();
+    }
   }
 
   @override

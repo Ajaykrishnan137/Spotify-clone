@@ -12,6 +12,7 @@ import '../../core/constants/dimensions.dart';
 import '../../core/utils/formatters.dart';
 import '../shared_widgets/app_image.dart';
 import '../shared_widgets/download_button.dart';
+import '../shared_widgets/equalizer_sheet.dart';
 import '../shared_widgets/spotify_logo.dart';
 import 'queue_sheet.dart';
 
@@ -151,18 +152,34 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.queue_music, size: 26, color: AppColors.textPrimary),
-                    tooltip: 'Queue',
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        useSafeArea: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const QueueSheet(),
-                      );
-                    },
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.tune, size: 24, color: AppColors.textPrimary),
+                        tooltip: 'Equalizer & Audio',
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => const EqualizerSheet(),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.queue_music, size: 26, color: AppColors.textPrimary),
+                        tooltip: 'Queue',
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => const QueueSheet(),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -219,6 +236,36 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                           style: const TextStyle(
                             fontSize: 15,
                             color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Format and Bitrate Quality badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                            border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.high_quality, size: 14, color: AppColors.cyanAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                song.storagePath.endsWith('.flac')
+                                    ? 'FLAC • Lossless'
+                                    : (song.storagePath.endsWith('.ogg')
+                                        ? 'OGG • 320 kbps'
+                                        : 'MP3 • 320 kbps High Quality'),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.cyanAccent,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -310,14 +357,16 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                   IconButton(
                     icon: Icon(
                       Icons.shuffle,
-                      color: playerState.isShuffle ? effectiveColor : AppColors.textSecondary,
+                      size: 26,
+                      color: playerState.isShuffle ? AppColors.cyanAccent : AppColors.textSecondary,
                     ),
+                    tooltip: 'Shuffle: ${playerState.isShuffle ? "ON" : "OFF"}',
                     onPressed: () {
                       ref.read(audioPlayerControllerProvider.notifier).toggleShuffle();
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 36, color: AppColors.textPrimary),
+                    icon: const Icon(Icons.skip_previous, size: 38, color: AppColors.textPrimary),
                     onPressed: () {
                       ref.read(audioPlayerControllerProvider.notifier).skipToPrevious();
                     },
@@ -327,28 +376,35 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ref.read(audioPlayerControllerProvider.notifier).togglePlayPause();
                     },
                     child: Container(
-                      width: 68,
-                      height: 68,
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
-                        color: effectiveColor,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E90FF), Color(0xFF38D6FF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: effectiveColor.withOpacity(0.4),
-                            blurRadius: 16,
+                            color: const Color(0xFF38D6FF).withOpacity(0.45),
+                            blurRadius: 20,
                             spreadRadius: 2,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                      child: Icon(
-                        playerState.isPlaying ? Icons.pause : Icons.play_arrow,
-                        color: Colors.black,
-                        size: 38,
+                      child: Center(
+                        child: Icon(
+                          playerState.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 42,
+                        ),
                       ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_next, size: 36, color: AppColors.textPrimary),
+                    icon: const Icon(Icons.skip_next, size: 38, color: AppColors.textPrimary),
                     onPressed: () {
                       ref.read(audioPlayerControllerProvider.notifier).skipToNext();
                     },
@@ -357,8 +413,9 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                     icon: Icon(
                       playerState.loopMode == PlayerLoopMode.one
                           ? Icons.repeat_one
-                          : (playerState.loopMode == PlayerLoopMode.all ? Icons.repeat : Icons.repeat),
-                      color: playerState.loopMode != PlayerLoopMode.off ? effectiveColor : AppColors.textSecondary,
+                          : Icons.repeat,
+                      size: 26,
+                      color: playerState.loopMode != PlayerLoopMode.off ? AppColors.cyanAccent : AppColors.textSecondary,
                     ),
                     tooltip: 'Repeat: ${playerState.loopMode.name.toUpperCase()}',
                     onPressed: () {

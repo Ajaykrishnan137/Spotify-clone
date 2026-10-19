@@ -17,6 +17,7 @@ class SongTile extends ConsumerWidget {
   final bool isPlaying;
   final VoidCallback onTap;
   final Widget? trailing;
+  final VoidCallback? onRemoveFromPlaylist;
 
   const SongTile({
     super.key,
@@ -24,6 +25,7 @@ class SongTile extends ConsumerWidget {
     this.isPlaying = false,
     required this.onTap,
     this.trailing,
+    this.onRemoveFromPlaylist,
   });
 
   void _showSongOptions(BuildContext context, WidgetRef ref) {
@@ -86,6 +88,15 @@ class SongTile extends ConsumerWidget {
                     _showAddToPlaylistDialog(context, ref);
                   },
                 ),
+                if (onRemoveFromPlaylist != null)
+                  ListTile(
+                    leading: const Icon(Icons.playlist_remove, color: AppColors.error),
+                    title: const Text('Remove from this playlist', style: TextStyle(color: AppColors.error)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onRemoveFromPlaylist!();
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.download, color: AppColors.textPrimary),
                   title: const Text('Download for Offline Play', style: TextStyle(color: AppColors.textPrimary)),

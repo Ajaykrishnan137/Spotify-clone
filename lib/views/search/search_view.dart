@@ -9,7 +9,7 @@ import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/empty_view.dart';
 import '../shared_widgets/spotify_logo.dart';
 import '../../core/services/cloud_catalog_service.dart';
-import '../../core/services/online_music_search_service.dart';
+import '../../core/services/legal_search_engine_service.dart';
 import '../playlist/playlist_detail_view.dart';
 
 class SearchView extends ConsumerStatefulWidget {
@@ -19,12 +19,17 @@ class SearchView extends ConsumerStatefulWidget {
   ConsumerState<SearchView> createState() => _SearchViewState();
 }
 
-class _SearchViewState extends ConsumerState<SearchView> {
+class _SearchViewState extends ConsumerState<SearchView> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  late TabController _tabController;
   Timer? _debounce;
-  List<SongModel> _results = [];
   bool _isLoading = false;
-  final List<String> _recentSearches = ['With Love', 'Pradeep Kumar', 'Sid Sriram', 'Tamil Melody'];
+
+  MultiSourceResult _searchResult = const MultiSourceResult();
+  String _selectedSourceFilter = 'All';
+  String _selectedQualityFilter = 'All';
+
+  final List<String> _recentSearches = ['With Love', 'Pradeep Kumar', 'Sid Sriram', 'Tamil Melody', 'Jamendo Acoustic'];
 
   static const List<Map<String, dynamic>> _browseGenres = [
     {'title': 'Pop & Melody', 'color': Color(0xFFE91E63), 'icon': Icons.music_note},
@@ -35,6 +40,20 @@ class _SearchViewState extends ConsumerState<SearchView> {
     {'title': 'Dance / Party', 'color': Color(0xFFFF8F00), 'icon': Icons.celebration},
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 5, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
@@ -42,16 +61,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
     });
   }
 
-  List<SongModel> _catalogResults = [];
-  List<SongModel> _onlineResults = [];
-
   Future<void> _performSearch(String query) async {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) {
       setState(() {
-        _results = [];
-        _catalogResults = [];
-        _onlineResults = [];
+        _searchResult = const MultiSourceResult();
         _isLoading = false;
       });
       return;
@@ -61,29 +75,17 @@ class _SearchViewState extends ConsumerState<SearchView> {
       _isLoading = true;
     });
 
-    final searchService = ref.read(cloudCatalogServiceProvider);
-    final catalogMatches = await searchService.searchSongs(cleanQuery);
+    final catalog = await ref.read(cloudCatalogServiceProvider).getCatalog();
+    final result = await LegalSearchEngineService.searchAllSources(
+      query: cleanQuery,
+      localCatalog: catalog,
+      sourceFilter: _selectedSourceFilter != 'All' ? _selectedSourceFilter : null,
+      qualityFilter: _selectedQualityFilter != 'All' ? _selectedQualityFilter : null,
+    );
 
     if (mounted) {
       setState(() {
-        _catalogResults = catalogMatches;
-        _results = catalogMatches;
-      });
-    }
-
-    // Always fetch live online matches by song/movie name for new released songs
-    final onlineMatches = await OnlineMusicSearchService.searchOnline(cleanQuery);
-
-    if (mounted) {
-      // Deduplicate: avoid songs already matched in catalog by title and artist
-      final existingTitles = _catalogResults.map((s) => s.title.toLowerCase().trim()).toSet();
-      final filteredOnline = onlineMatches.where((s) {
-        return !existingTitles.contains(s.title.toLowerCase().trim());
-      }).toList();
-
-      setState(() {
-        _onlineResults = filteredOnline;
-        _results = [..._catalogResults, ..._onlineResults];
+        _searchResult = result;
         _isLoading = false;
       });
     }
@@ -98,15 +100,66 @@ class _SearchViewState extends ConsumerState<SearchView> {
     }
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
+  Widget _buildSongList(List<SongModel> songs, AudioPlayerController playerController, PlayerStateData playerState) {
+    if (songs.isEmpty && !_isLoading) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.search_off_rounded, size: 54, color: AppColors.textSecondary),
+              const SizedBox(height: 12),
+              const Text(
+                'No licensed match found',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'SkyTune only streams from legal, authorized sources (Local Library, Jamendo, Free Music Archive, Internet Archive).\nTry another spelling or alternate keywords.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                children: ['Acoustic', 'Chill', 'Melody', 'Safar', 'Banger'].map((hint) {
+                  return ActionChip(
+                    backgroundColor: AppColors.card,
+                    label: Text('Try "$hint"', style: const TextStyle(color: AppColors.cyanAccent, fontSize: 12)),
+                    onPressed: () {
+                      _searchController.text = hint;
+                      _performSearch(hint);
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: songs.length,
+      padding: const EdgeInsets.only(bottom: Dimensions.space64),
+      itemBuilder: (context, index) {
+        final song = songs[index];
+        return SongTile(
+          song: song,
+          isPlaying: playerState.currentSong?.id == song.id,
+          onTap: () {
+            _onSearchSubmitted(_searchController.text);
+            playerController.playSong(song, queue: songs, index: index);
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final playerController = ref.read(audioPlayerControllerProvider.notifier);
     final playerState = ref.watch(audioPlayerControllerProvider);
     final allSongsAsync = ref.watch(allSongsProvider);
 
@@ -127,9 +180,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ),
               ),
             ),
-            // Search Input
+            // Search Input with debounced search-as-you-type
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
+              padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space4),
               child: TextField(
                 controller: _searchController,
                 onChanged: _onSearchChanged,
@@ -138,8 +191,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.white,
-                  hintText: 'What do you want to listen to?',
-                  hintStyle: const TextStyle(color: Color(0xFF757575), fontSize: 15),
+                  hintText: 'Search songs, albums, artists, or movies...',
+                  hintStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
                   prefixIcon: const Icon(Icons.search, color: Colors.black),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
@@ -158,223 +211,218 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ),
               ),
             ),
-            if (_isLoading)
-              Consumer(
-                builder: (_, ref, __) {
-                  final themeColor = ref.watch(nowPlayingThemeColorProvider);
-                  return LinearProgressIndicator(
-                    backgroundColor: AppColors.surface,
-                    valueColor: AlwaysStoppedAnimation<Color>(themeColor),
-                    minHeight: 2.5,
-                  );
-                },
-              ),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: _searchController.text.isEmpty
-                    ? ListView(
-                        key: const ValueKey('browse_and_recent'),
-                        padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16),
-                        children: [
-                          // Recent Searches
-                          if (_recentSearches.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Recent searches',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: _recentSearches.map((term) {
-                                return ActionChip(
-                                  backgroundColor: AppColors.card,
-                                  label: Text(term, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-                                  avatar: const Icon(Icons.history, size: 16, color: AppColors.textSecondary),
-                                  onPressed: () {
-                                    _searchController.text = term;
-                                    _performSearch(term);
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
 
-                          // Genre / Mood Browse Tiles
+            // Filter Chips (Legal Sources & Quality)
+            if (_searchController.text.isNotEmpty)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 6),
+                child: Row(
+                  children: [
+                    // Source filter dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _selectedSourceFilter,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: AppColors.card,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                        icon: const Icon(Icons.filter_list, size: 16, color: AppColors.cyanAccent),
+                        items: ['All', 'Local', 'Jamendo', 'Archive', 'Release'].map((src) {
+                          return DropdownMenuItem(value: src, child: Text('Source: $src'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedSourceFilter = val);
+                            _performSearch(_searchController.text);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Quality filter dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _selectedQualityFilter,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: AppColors.card,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                        icon: const Icon(Icons.high_quality, size: 16, color: AppColors.cyanAccent),
+                        items: ['All', 'High (320kbps)', 'Lossless'].map((q) {
+                          return DropdownMenuItem(value: q, child: Text('Quality: $q'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedQualityFilter = val);
+                            _performSearch(_searchController.text);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Tab bar for categories (All, Songs, Albums/Movies, Artists, Playlists)
+            if (_searchController.text.isNotEmpty)
+              TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                indicatorColor: AppColors.cyanAccent,
+                labelColor: AppColors.cyanAccent,
+                unselectedLabelColor: AppColors.textSecondary,
+                tabs: [
+                  Tab(text: 'All (${_searchResult.all.length})'),
+                  Tab(text: 'Songs (${_searchResult.songs.length})'),
+                  Tab(text: 'Albums/Movies (${_searchResult.albums.length})'),
+                  Tab(text: 'Artists (${_searchResult.artists.length})'),
+                  Tab(text: 'Playlists (${_searchResult.playlists.length})'),
+                ],
+              ),
+
+            if (_isLoading)
+              const LinearProgressIndicator(
+                backgroundColor: AppColors.surface,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyanAccent),
+                minHeight: 2.5,
+              ),
+
+            Expanded(
+              child: _searchController.text.isEmpty
+                  ? ListView(
+                      key: const ValueKey('browse_and_recent'),
+                      padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16),
+                      children: [
+                        // Recent Searches
+                        if (_recentSearches.isNotEmpty) ...[
+                          const SizedBox(height: 8),
                           const Text(
-                            'Browse all',
+                            'Recent searches',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _browseGenres.length,
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.6,
-                            ),
-                            itemBuilder: (context, index) {
-                              final item = _browseGenres[index];
-                              return InkWell(
-                                borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
-                                onTap: () {
-                                  final title = item['title'] as String;
-                                  final allSongs = allSongsAsync.value ?? [];
-                                  final filtered = allSongs.where((s) {
-                                    final g = s.genre.toLowerCase();
-                                    final t = title.toLowerCase();
-                                    return g.contains(t.split(' ').first) || t.contains(g);
-                                  }).toList();
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _recentSearches.map((term) {
+                              return ActionChip(
+                                backgroundColor: AppColors.card,
+                                label: Text(term, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                                avatar: const Icon(Icons.history, size: 16, color: AppColors.textSecondary),
+                                onPressed: () {
+                                  _searchController.text = term;
+                                  _performSearch(term);
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
 
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => PlaylistDetailView(
-                                        title: title,
-                                        subtitle: 'Browse Category',
-                                        songs: filtered.isNotEmpty ? filtered : allSongs.take(15).toList(),
+                        // Genre / Mood Browse Tiles
+                        const Text(
+                          'Browse legal catalogs',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _browseGenres.length,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 1.6,
+                          ),
+                          itemBuilder: (context, index) {
+                            final item = _browseGenres[index];
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
+                              onTap: () {
+                                final title = item['title'] as String;
+                                final allSongs = allSongsAsync.value ?? [];
+                                final filtered = allSongs.where((s) {
+                                  final g = s.genre.toLowerCase();
+                                  final t = title.toLowerCase();
+                                  return g.contains(t.split(' ').first) || t.contains(g);
+                                }).toList();
+
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PlaylistDetailView(
+                                      title: title,
+                                      subtitle: 'Legal Music Collection',
+                                      songs: filtered.isNotEmpty ? filtered : allSongs.take(15).toList(),
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: item['color'] as Color,
+                                  borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
+                                ),
+                                padding: const EdgeInsets.all(Dimensions.space12),
+                                child: Stack(
+                                  children: [
+                                    Text(
+                                      item['title'] as String,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                  );
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: item['color'] as Color,
-                                    borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
-                                  ),
-                                  padding: const EdgeInsets.all(Dimensions.space12),
-                                  child: Stack(
-                                    children: [
-                                      Text(
-                                        item['title'] as String,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Transform.rotate(
+                                        angle: 0.3,
+                                        child: Icon(
+                                          item['icon'] as IconData,
+                                          size: 40,
+                                          color: Colors.white.withOpacity(0.4),
                                         ),
                                       ),
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Transform.rotate(
-                                          angle: 0.3,
-                                          child: Icon(
-                                            item['icon'] as IconData,
-                                            size: 40,
-                                            color: Colors.white.withOpacity(0.4),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: Dimensions.space64),
-                        ],
-                      )
-                    : _results.isEmpty && !_isLoading
-                        ? const EmptyView(
-                            key: ValueKey('no_results'),
-                            title: 'No results found',
-                            subtitle: 'Please check your spelling or try another keyword.',
-                            icon: Icons.music_off,
-                          )
-                        : ListView(
-                            key: const ValueKey('results_list'),
-                            children: [
-                              if (_catalogResults.isNotEmpty) ...[
-                                const Padding(
-                                  padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.library_music, size: 16, color: AppColors.cyanAccent),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'In Your Releases & Library',
-                                        style: TextStyle(
-                                          color: AppColors.cyanAccent,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                ..._catalogResults.asMap().entries.map((entry) {
-                                  final index = entry.key;
-                                  final song = entry.value;
-                                  return SongTile(
-                                    song: song,
-                                    isPlaying: playerState.currentSong?.id == song.id,
-                                    onTap: () {
-                                      _onSearchSubmitted(_searchController.text);
-                                      ref.read(audioPlayerControllerProvider.notifier).playSong(
-                                            song,
-                                            queue: _results,
-                                            index: index,
-                                          );
-                                    },
-                                  );
-                                }),
-                              ],
-                              if (_onlineResults.isNotEmpty) ...[
-                                Padding(
-                                  padding: EdgeInsets.fromLTRB(16, _catalogResults.isNotEmpty ? 18 : 10, 16, 6),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.public, size: 16, color: Color(0xFF38D6FF)),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'New Releases & Global Search',
-                                        style: TextStyle(
-                                          color: Color(0xFF38D6FF),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                ..._onlineResults.asMap().entries.map((entry) {
-                                  final relIndex = entry.key;
-                                  final absIndex = _catalogResults.length + relIndex;
-                                  final song = entry.value;
-                                  return SongTile(
-                                    song: song,
-                                    isPlaying: playerState.currentSong?.id == song.id,
-                                    onTap: () {
-                                      _onSearchSubmitted(_searchController.text);
-                                      ref.read(audioPlayerControllerProvider.notifier).playSong(
-                                            song,
-                                            queue: _results,
-                                            index: absIndex,
-                                          );
-                                    },
-                                  );
-                                }),
-                              ],
-                              const SizedBox(height: Dimensions.space64),
-                            ],
-                          ),
-              ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: Dimensions.space64),
+                      ],
+                    )
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildSongList(_searchResult.all, playerController, playerState),
+                        _buildSongList(_searchResult.songs, playerController, playerState),
+                        _buildSongList(_searchResult.albums, playerController, playerState),
+                        _buildSongList(_searchResult.artists, playerController, playerState),
+                        _buildSongList(_searchResult.playlists, playerController, playerState),
+                      ],
+                    ),
             ),
           ],
         ),

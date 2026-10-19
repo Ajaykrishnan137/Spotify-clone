@@ -11,6 +11,8 @@ import '../core/security/encrypted_audio_source.dart';
 import '../core/services/state_persistence_service.dart';
 import '../data/remote/supabase_songs_repository.dart';
 
+import '../core/services/art_cache_service.dart';
+
 enum PlayerLoopMode { off, all, one }
 
 class PlayerStateData {
@@ -81,6 +83,10 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
         _keyManager = keyManager,
         _persistenceService = persistenceService,
         super(const PlayerStateData()) {
+    // Connect notification and headset/bluetooth buttons directly to shared controller
+    _audioHandler.onSkipToNext = () => skipToNext();
+    _audioHandler.onSkipToPrevious = () => skipToPrevious();
+
     _listenToPlayerStreams();
     _restoreSavedState();
   }
@@ -98,21 +104,24 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
         );
 
         if (saved.currentSong != null) {
+          final song = saved.currentSong!;
+          final localArtUri = await ArtCacheService.getLocalArtUri(song.coverUrl);
+
           // Update notification/lock screen media item so it's ready
           _audioHandler.updateMediaItem(
             MediaItem(
-              id: saved.currentSong!.id,
-              album: saved.currentSong!.album,
-              title: saved.currentSong!.title,
-              artist: saved.currentSong!.artist,
-              artUri: Uri.tryParse(saved.currentSong!.coverUrl),
-              duration: Duration(milliseconds: saved.currentSong!.durationMs),
+              id: song.id,
+              album: song.album,
+              title: song.title,
+              artist: song.artist,
+              artUri: localArtUri,
+              duration: Duration(milliseconds: song.durationMs),
             ),
           );
 
           // Prepare the player audio source at the saved position without auto-playing
           try {
-            await _setupAudioSource(saved.currentSong!);
+            await _setupAudioSource(song);
             if (saved.positionMs > 0) {
               await _audioHandler.player.seek(Duration(milliseconds: saved.positionMs));
             }
@@ -225,15 +234,19 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     );
 
     _addToRecentlyPlayed(song);
+    _saveStateToDisk();
 
-    // Update system lockscreen & notification media item
+    // 1. Resolve local/cached artUri bitmap for notification and lockscreen
+    final localArtUri = await ArtCacheService.getLocalArtUri(song.coverUrl);
+
+    // 2. Update system lockscreen & notification media item
     _audioHandler.updateMediaItem(
       MediaItem(
         id: song.id,
         album: song.album,
         title: song.title,
         artist: song.artist,
-        artUri: Uri.tryParse(song.coverUrl),
+        artUri: localArtUri,
         duration: Duration(milliseconds: song.durationMs),
       ),
     );

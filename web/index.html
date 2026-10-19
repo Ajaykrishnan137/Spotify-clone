@@ -30,6 +30,40 @@
   </style>
 </head>
 <body>
+  <script>
+    // SkyTune Web / PWA navigator.mediaSession bridge
+    window.updateSkyTuneMediaSession = function(track) {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.title || 'SkyTune',
+          artist: track.artist || 'SkyTune',
+          album: track.album || 'SkyTune Music',
+          artwork: [
+            { src: track.artwork || 'icons/Icon-192.png', sizes: '96x96', type: 'image/png' },
+            { src: track.artwork || 'icons/Icon-192.png', sizes: '128x128', type: 'image/png' },
+            { src: track.artwork || 'icons/Icon-512.png', sizes: '256x256', type: 'image/png' },
+            { src: track.artwork || 'icons/Icon-512.png', sizes: '512x512', type: 'image/png' }
+          ]
+        });
+
+        const actions = [
+          ['play', () => window.dispatchEvent(new CustomEvent('skytune-play'))],
+          ['pause', () => window.dispatchEvent(new CustomEvent('skytune-pause'))],
+          ['previoustrack', () => window.dispatchEvent(new CustomEvent('skytune-previous'))],
+          ['nexttrack', () => window.dispatchEvent(new CustomEvent('skytune-next'))],
+          ['seekto', (details) => {
+            window.dispatchEvent(new CustomEvent('skytune-seek', { detail: details.seekTime }));
+          }]
+        ];
+
+        for (const [action, handler] of actions) {
+          try {
+            navigator.mediaSession.setActionHandler(action, handler);
+          } catch (e) {}
+        }
+      }
+    };
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

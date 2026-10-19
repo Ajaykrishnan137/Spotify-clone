@@ -108,17 +108,38 @@ class MiniPlayer extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      playerState.isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: AppColors.textPrimary,
-                    ),
-                    onPressed: () {
+                  GestureDetector(
+                    onTap: () {
                       ref.read(audioPlayerControllerProvider.notifier).togglePlayPause();
                     },
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E90FF), Color(0xFF38D6FF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF38D6FF).withOpacity(0.4),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        playerState.isPlaying ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_next, color: AppColors.textPrimary),
+                    icon: const Icon(Icons.skip_next, color: AppColors.textPrimary, size: 24),
                     onPressed: () {
                       ref.read(audioPlayerControllerProvider.notifier).skipToNext();
                     },
