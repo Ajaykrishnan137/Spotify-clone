@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../models/song_model.dart';
+import '../../models/download_state.dart';
 import '../../controllers/audio_player_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/playlist_controller.dart';
