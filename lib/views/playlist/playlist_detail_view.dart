@@ -7,6 +7,7 @@ import '../../controllers/download_controller.dart';
 import '../../controllers/playlist_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
+import '../../core/services/playlist_visibility_service.dart';
 import '../shared_widgets/app_image.dart';
 import '../shared_widgets/song_tile.dart';
 
@@ -16,6 +17,8 @@ class PlaylistDetailView extends ConsumerStatefulWidget {
   final String? coverUrl;
   final List<SongModel> songs;
   final String? playlistId;
+  final bool isImportedPlaylist;
+  final String? importedCategoryName;
 
   const PlaylistDetailView({
     super.key,
@@ -24,6 +27,8 @@ class PlaylistDetailView extends ConsumerStatefulWidget {
     this.coverUrl,
     required this.songs,
     this.playlistId,
+    this.isImportedPlaylist = false,
+    this.importedCategoryName,
   });
 
   @override
@@ -57,6 +62,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
       SnackBar(
         content: Text('Removed "${song.title}" from ${widget.title}'),
         backgroundColor: AppColors.surface,
+        duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'UNDO',
           textColor: AppColors.cyanAccent,
@@ -98,6 +104,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
       SnackBar(
         content: Text('Removed ${removed.length} songs from ${widget.title}'),
         backgroundColor: AppColors.surface,
+        duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'UNDO',
           textColor: AppColors.cyanAccent,
@@ -116,38 +123,79 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
     );
   }
 
+  /// Confirmation dialog before deleting playlist
   void _confirmDeleteEntirePlaylist() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: Text('Delete "${widget.title}"?'),
-        content: const Text(
-          'This playlist will be deleted permanently. Downloaded songs will NOT be removed.',
-          style: TextStyle(color: AppColors.textSecondary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Dimensions.radiusMedium)),
+        title: Text(
+          'Delete ${widget.title}?',
+          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Delete "${widget.title}"? This won\'t delete the songs from your downloads or other playlists.',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B6B), // Coral accent #FF6B6B
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
-              if (widget.playlistId != null) {
-                ref.read(localPlaylistControllerProvider.notifier).deletePlaylist(widget.playlistId!);
-              }
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Deleted playlist "${widget.title}"'),
-                  backgroundColor: AppColors.surface,
-                ),
-              );
+              _executeDeletePlaylist();
             },
-            child: const Text('Delete', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _executeDeletePlaylist() {
+    final deletedTitle = widget.title;
+    final categoryName = widget.importedCategoryName ?? widget.title;
+    final isCustom = widget.playlistId != null;
+    final playlistId = widget.playlistId;
+    final cachedSongs = List<SongModel>.from(_currentSongs);
+
+    if (isCustom && playlistId != null) {
+      ref.read(localPlaylistControllerProvider.notifier).deletePlaylist(playlistId);
+    } else {
+      ref.read(hiddenPlaylistsProvider.notifier).hidePlaylist(categoryName);
+    }
+
+    Navigator.pop(context); // Pop PlaylistDetailView back to previous screen
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Deleted playlist "$deletedTitle"'),
+        backgroundColor: AppColors.surface,
+        duration: const Duration(seconds: 5), // About 5 seconds
+        action: SnackBarAction(
+          label: 'UNDO',
+          textColor: AppColors.cyanAccent,
+          onPressed: () {
+            if (isCustom && playlistId != null) {
+              ref.read(localPlaylistControllerProvider.notifier).createPlaylist(deletedTitle).then((_) {
+                for (final song in cachedSongs) {
+                  ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(playlistId, song);
+                }
+              });
+            } else {
+              ref.read(hiddenPlaylistsProvider.notifier).unhidePlaylist(categoryName);
+            }
+          },
+        ),
       ),
     );
   }
@@ -173,7 +221,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
             actions: [
               if (_isMultiSelect) ...[
                 IconButton(
-                  icon: const Icon(Icons.delete, color: AppColors.error),
+                  icon: const Icon(Icons.delete, color: Color(0xFFFF6B6B)),
                   tooltip: 'Remove selected (${_selectedSongIds.length})',
                   onPressed: _selectedSongIds.isEmpty ? null : _removeSelectedSongs,
                 ),
@@ -197,28 +245,31 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                     });
                   },
                 ),
-                if (widget.playlistId != null)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, color: Colors.white),
-                    color: AppColors.card,
-                    onSelected: (val) {
-                      if (val == 'delete_playlist') {
-                        _confirmDeleteEntirePlaylist();
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(
-                        value: 'delete_playlist',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_forever, color: AppColors.error, size: 20),
-                            SizedBox(width: 8),
-                            Text('Delete Playlist', style: TextStyle(color: AppColors.error)),
-                          ],
-                        ),
+                // Three-dot menu available for EVERY playlist (imported, folder, or custom)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  color: AppColors.card,
+                  onSelected: (val) {
+                    if (val == 'delete_playlist') {
+                      _confirmDeleteEntirePlaylist();
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'delete_playlist',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: Color(0xFFFF6B6B), size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete playlist',
+                            style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
               ],
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -516,7 +567,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
               ),
             ),
           const SliverToBoxAdapter(
-            child: SizedBox(height: Dimensions.space64),
+            child: SizedBox(height: Dimensions.miniPlayerHeight + Dimensions.space64),
           ),
         ],
       ),

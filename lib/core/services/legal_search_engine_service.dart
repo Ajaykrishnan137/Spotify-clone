@@ -3,37 +3,19 @@ import 'package:http/http.dart' as http;
 import '../../models/song_model.dart';
 import 'online_music_search_service.dart';
 
-class MultiSourceResult {
-  final List<SongModel> songs;
-  final List<SongModel> albums;
-  final List<SongModel> artists;
-  final List<SongModel> playlists;
-
-  const MultiSourceResult({
-    this.songs = const [],
-    this.albums = const [],
-    this.artists = const [],
-    this.playlists = const [],
-  });
-
-  List<SongModel> get all => [...songs, ...albums, ...artists, ...playlists];
-}
-
 class LegalSearchEngineService {
   LegalSearchEngineService._();
 
-  static final Map<String, MultiSourceResult> _cache = {};
+  static final Map<String, List<SongModel>> _cache = {};
 
   /// Normalizes text: lowercases, removes accents, ignores punctuation
   static String normalize(String input) {
     var text = input.toLowerCase().trim();
-    // Normalize common transliterated vowels / accented chars
     const withAccents = 'áàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ';
     const withoutAccents = 'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
     for (int i = 0; i < withAccents.length; i++) {
       text = text.replaceAll(withAccents[i], withoutAccents[i]);
     }
-    // Remove extra punctuation for fuzzy matching
     text = text.replaceAll(RegExp(r'''[.,\/#!$%\^&\*;:{}=\-_`~()?'"\[\]]'''), ' ');
     return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
@@ -60,8 +42,9 @@ class LegalSearchEngineService {
     return 0.0;
   }
 
-  /// Searches all legal sources in parallel: Local catalog, Jamendo, Free Music Archive, Internet Archive, & licensed releases
-  static Future<MultiSourceResult> searchAllSources({
+  /// Searches all legal sources in parallel, returning one continuous list of matching SongModels.
+  /// Matches the query against song title, artist, album/movie name, and playlist/genre name.
+  static Future<List<SongModel>> searchAllSources({
     required String query,
     required List<SongModel> localCatalog,
     String? languageFilter,
@@ -69,7 +52,7 @@ class LegalSearchEngineService {
     String? qualityFilter,
   }) async {
     final cleanQuery = query.trim();
-    if (cleanQuery.isEmpty) return const MultiSourceResult();
+    if (cleanQuery.isEmpty) return const [];
 
     final cacheKey = '$cleanQuery|$languageFilter|$sourceFilter|$qualityFilter';
     if (_cache.containsKey(cacheKey)) {
@@ -129,49 +112,15 @@ class LegalSearchEngineService {
       }
     }
 
-    // 6. Categorize into result tabs: Songs, Albums, Artists, Playlists
-    final List<SongModel> songs = [];
-    final List<SongModel> albums = [];
-    final List<SongModel> artists = [];
-    final List<SongModel> playlists = [];
-
-    for (final s in merged) {
-      final tNorm = normalize(s.title);
-      final artNorm = normalize(s.artist);
-      final albNorm = normalize(s.album);
-
-      if (artNorm.contains(queryNorm)) {
-        artists.add(s);
-      } else if (albNorm.contains(queryNorm) && albNorm.isNotEmpty) {
-        albums.add(s);
-      } else if (s.genre.toLowerCase().contains('playlist') || s.genre.toLowerCase().contains('collection')) {
-        playlists.add(s);
-      } else {
-        songs.add(s);
-      }
-    }
-
-    // Default: ensure songs tab always has items
-    if (songs.isEmpty && merged.isNotEmpty) {
-      songs.addAll(merged);
-    }
-
-    final out = MultiSourceResult(
-      songs: songs,
-      albums: albums.isNotEmpty ? albums : merged.where((s) => s.album.isNotEmpty).take(10).toList(),
-      artists: artists.isNotEmpty ? artists : merged.take(10).toList(),
-      playlists: playlists.isNotEmpty ? playlists : merged.take(5).toList(),
-    );
-
-    _cache[cacheKey] = out;
-    return out;
+    _cache[cacheKey] = merged;
+    return merged;
   }
 
-  // Source 1: Local library search (offline guaranteed)
+  // Source 1: Local library search (offline guaranteed, matches song title, artist, album/movie, playlist/genre)
   static Future<List<SongModel>> _searchLocal(List<SongModel> catalog, String queryNorm) async {
     return catalog.where((s) {
       final combined = normalize('${s.title} ${s.artist} ${s.album} ${s.genre}');
-      return similarityScore(queryNorm, combined) >= 0.35;
+      return similarityScore(queryNorm, combined) >= 0.35 || combined.contains(queryNorm);
     }).toList();
   }
 
@@ -179,7 +128,7 @@ class LegalSearchEngineService {
   static Future<List<SongModel>> _searchJamendo(String query) async {
     try {
       final url = Uri.parse(
-        'https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=json&limit=10&namesearch=${Uri.encodeComponent(query)}&include=musicinfo&audioformat=mp32',
+        'https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=json&limit=15&namesearch=${Uri.encodeComponent(query)}&include=musicinfo&audioformat=mp32',
       );
       final res = await http.get(url).timeout(const Duration(seconds: 4));
       if (res.statusCode != 200) return [];
@@ -208,7 +157,7 @@ class LegalSearchEngineService {
   static Future<List<SongModel>> _searchInternetArchive(String query) async {
     try {
       final queryEncoded = Uri.encodeComponent('$query AND mediatype:(audio)');
-      final url = Uri.parse('https://archive.org/advancedsearch.php?q=$queryEncoded&fl[]=identifier,title,creator,collection,year&sort[]=&rows=8&page=1&output=json');
+      final url = Uri.parse('https://archive.org/advancedsearch.php?q=$queryEncoded&fl[]=identifier,title,creator,collection,year&sort[]=&rows=12&page=1&output=json');
       final res = await http.get(url).timeout(const Duration(seconds: 4));
       if (res.statusCode != 200) return [];
       final data = json.decode(res.body);
