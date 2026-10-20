@@ -11,6 +11,7 @@ import 'app_image.dart';
 import 'download_button.dart';
 import 'spotify_logo.dart';
 import 'animated_equalizer_bars.dart';
+import 'add_to_playlist_sheet.dart';
 
 class SongTile extends ConsumerWidget {
   final SongModel song;
@@ -117,47 +118,7 @@ class SongTile extends ConsumerWidget {
   }
 
   void _showAddToPlaylistDialog(BuildContext context, WidgetRef ref) {
-    final playlistsAsync = ref.read(localPlaylistControllerProvider);
-
-    playlistsAsync.whenData((playlists) {
-      if (playlists.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No playlists yet! Create one in Your Library first.')),
-        );
-        return;
-      }
-
-      showDialog(
-        context: context,
-        builder: (ctx) {
-          return AlertDialog(
-            backgroundColor: AppColors.card,
-            title: const Text('Add to Playlist', style: TextStyle(color: AppColors.textPrimary)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: playlists.length,
-                itemBuilder: (c, idx) {
-                  final pl = playlists[idx];
-                  return ListTile(
-                    leading: const Icon(Icons.queue_music, color: AppColors.accent),
-                    title: Text(pl.name, style: const TextStyle(color: AppColors.textPrimary)),
-                    onTap: () {
-                      ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(pl.id, song);
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Added to "${pl.name}"'), backgroundColor: AppColors.accent),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          );
-        },
-      );
-    });
+    AddToPlaylistSheet.show(context, songs: [song]);
   }
 
   @override

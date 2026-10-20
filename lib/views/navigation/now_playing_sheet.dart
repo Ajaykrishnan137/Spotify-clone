@@ -14,6 +14,7 @@ import '../shared_widgets/app_image.dart';
 import '../shared_widgets/download_button.dart';
 import '../shared_widgets/equalizer_sheet.dart';
 import '../shared_widgets/spotify_logo.dart';
+import '../shared_widgets/add_to_playlist_sheet.dart';
 import 'queue_sheet.dart';
 
 class NowPlayingSheet extends ConsumerStatefulWidget {
@@ -55,47 +56,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
   }
 
   void _showAddToPlaylistDialog(SongModel song) {
-    final playlistsAsync = ref.read(localPlaylistControllerProvider);
-
-    playlistsAsync.whenData((playlists) {
-      if (playlists.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No playlists yet! Create one in Your Library first.')),
-        );
-        return;
-      }
-
-      showDialog(
-        context: context,
-        builder: (ctx) {
-          return AlertDialog(
-            backgroundColor: AppColors.card,
-            title: const Text('Add to Playlist', style: TextStyle(color: AppColors.textPrimary)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: playlists.length,
-                itemBuilder: (c, idx) {
-                  final pl = playlists[idx];
-                  return ListTile(
-                    leading: const Icon(Icons.queue_music, color: AppColors.accent),
-                    title: Text(pl.name, style: const TextStyle(color: AppColors.textPrimary)),
-                    onTap: () {
-                      ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(pl.id, song);
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Added to "${pl.name}"'), backgroundColor: AppColors.accent),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          );
-        },
-      );
-    });
+    AddToPlaylistSheet.show(context, songs: [song]);
   }
 
   @override

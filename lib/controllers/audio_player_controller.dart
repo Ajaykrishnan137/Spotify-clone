@@ -13,6 +13,9 @@ import '../data/remote/supabase_songs_repository.dart';
 
 import '../core/services/art_cache_service.dart';
 
+import '../core/services/history_service.dart';
+import '../core/services/app_settings_service.dart';
+
 enum PlayerLoopMode { off, all, one }
 
 class PlayerStateData {
@@ -72,16 +75,22 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
   final SupabaseSongsRepository _songsRepo;
   final KeyManager _keyManager;
   final StatePersistenceService _persistenceService;
+  final HistoryNotifier _historyNotifier;
+  final AppSettingsNotifier _settingsNotifier;
 
   AudioPlayerController({
     required AudioPlayerHandler audioHandler,
     required SupabaseSongsRepository songsRepo,
     required KeyManager keyManager,
     required StatePersistenceService persistenceService,
+    required HistoryNotifier historyNotifier,
+    required AppSettingsNotifier settingsNotifier,
   })  : _audioHandler = audioHandler,
         _songsRepo = songsRepo,
         _keyManager = keyManager,
         _persistenceService = persistenceService,
+        _historyNotifier = historyNotifier,
+        _settingsNotifier = settingsNotifier,
         super(const PlayerStateData()) {
     // Connect notification and headset/bluetooth buttons directly to shared controller
     _audioHandler.onSkipToNext = () => skipToNext();
@@ -234,6 +243,7 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     );
 
     _addToRecentlyPlayed(song);
+    _historyNotifier.recordPlay(song);
     _saveStateToDisk();
 
     // 1. Resolve local/cached artUri bitmap for notification and lockscreen
@@ -259,6 +269,21 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     } catch (e) {
       state = state.copyWith(isLoading: false);
     }
+  }
+
+  /// Update queue list when playlist order is reordered, without interrupting playback
+  void updateQueuePreservingCurrent(List<SongModel> newQueue) {
+    if (state.currentSong == null) {
+      state = state.copyWith(queue: newQueue, currentIndex: 0);
+      _saveStateToDisk();
+      return;
+    }
+    final newIdx = newQueue.indexWhere((s) => s.id == state.currentSong!.id);
+    state = state.copyWith(
+      queue: newQueue,
+      currentIndex: newIdx >= 0 ? newIdx : state.currentIndex,
+    );
+    _saveStateToDisk();
   }
 
   Future<void> togglePlayPause() async {
@@ -394,5 +419,7 @@ final audioPlayerControllerProvider =
     songsRepo: ref.watch(supabaseSongsRepoProvider),
     keyManager: ref.watch(keyManagerProvider),
     persistenceService: ref.watch(statePersistenceServiceProvider),
+    historyNotifier: ref.watch(historyNotifierProvider.notifier),
+    settingsNotifier: ref.watch(appSettingsProvider.notifier),
   );
 });

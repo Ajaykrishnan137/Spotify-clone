@@ -12,6 +12,11 @@ import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/spotify_logo.dart';
 import '../playlist/playlist_detail_view.dart';
 
+import '../../core/services/in_app_notifications_service.dart';
+import 'notifications_view.dart';
+import 'history_view.dart';
+import '../settings/settings_view.dart';
+
 class HomeView extends ConsumerWidget {
   const HomeView({super.key});
 
@@ -20,6 +25,7 @@ class HomeView extends ConsumerWidget {
     final playerState = ref.watch(audioPlayerControllerProvider);
     final songsAsync = ref.watch(allSongsProvider);
     final hiddenPlaylists = ref.watch(hiddenPlaylistsProvider);
+    final unreadNotifsCount = ref.watch(inAppNotificationsNotifierProvider.notifier).unreadCount;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -38,17 +44,77 @@ class HomeView extends ConsumerWidget {
                   const SizedBox(width: 12),
                   const SkyTuneWordmark(fontSize: 22),
                   const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.notifications_none, color: AppColors.textPrimary),
-                    onPressed: () {},
+
+                  // Notifications Icon with Badge & 48px Touch Target
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IconButton(
+                        iconSize: 26,
+                        splashRadius: 24,
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        icon: const Icon(Icons.notifications_none, color: AppColors.textPrimary),
+                        tooltip: 'Notifications',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const NotificationsView()),
+                          );
+                        },
+                      ),
+                      if (unreadNotifsCount > 0)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: AppColors.cyanAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Text(
+                              '$unreadNotifsCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+
+                  // History Icon with 48px Touch Target
                   IconButton(
+                    iconSize: 26,
+                    splashRadius: 24,
+                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(Icons.history, color: AppColors.textPrimary),
-                    onPressed: () {},
+                    tooltip: 'Listening History',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const HistoryView()),
+                      );
+                    },
                   ),
+
+                  // Settings Icon with 48px Touch Target
                   IconButton(
+                    iconSize: 26,
+                    splashRadius: 24,
+                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(Icons.settings_outlined, color: AppColors.textPrimary),
-                    onPressed: () {},
+                    tooltip: 'Settings',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SettingsView()),
+                      );
+                    },
                   ),
                 ],
               ),
