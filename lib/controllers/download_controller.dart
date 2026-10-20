@@ -101,7 +101,7 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
   }
 
   void _listenToConnectivity() {
-    _connectivityService.connectivityStream.listen((status) {
+    _connectivityService.stream.listen((status) {
       if (status == NetworkStatus.online) {
         if (_isQueuePaused && !_userPausedManually) {
           _isQueuePaused = false;
