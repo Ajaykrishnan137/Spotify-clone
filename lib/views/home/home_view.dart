@@ -452,7 +452,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                  border: Border.all(color: AppColors.cardBorder),
+                  border: Border.all(color: AppColors.elevated),
                 ),
                 child: Row(
                   children: [
@@ -520,7 +520,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                             decoration: BoxDecoration(
                               color: AppColors.surface,
                               borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                              border: Border.all(color: AppColors.cardBorder),
+                              border: Border.all(color: AppColors.elevated),
                             ),
                             child: const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -572,7 +572,6 @@ class _HomeViewState extends ConsumerState<HomeView> {
                               subtitle: '${songs.length} songs',
                               coverUrl: pl.coverUrl,
                               songs: songs,
-                              isCustomPlaylist: true,
                             ),
                           ),
                         );
@@ -587,9 +586,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                             width: 125,
                             height: 125,
                             color: AppColors.surface,
-                            child: pl.coverUrl != null && pl.coverUrl!.isNotEmpty
+                            child: (pl.coverUrl != null && pl.coverUrl!.isNotEmpty)
                                 ? AppImage(
-                                    url: pl.coverUrl,
+                                    url: pl.coverUrl!,
                                     fit: BoxFit.cover,
                                   )
                                 : const Icon(Icons.music_note, size: 40, color: AppColors.accent),
@@ -745,7 +744,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                border: Border.all(color: AppColors.cardBorder),
+                border: Border.all(color: AppColors.elevated),
               ),
               child: const Row(
                 children: [
