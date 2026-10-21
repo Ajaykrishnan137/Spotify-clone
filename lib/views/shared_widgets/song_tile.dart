@@ -18,6 +18,7 @@ class SongTile extends ConsumerWidget {
   final bool isPlaying;
   final VoidCallback onTap;
   final Widget? trailing;
+  final Widget? dragHandle;
   final VoidCallback? onRemoveFromPlaylist;
 
   const SongTile({
@@ -26,6 +27,7 @@ class SongTile extends ConsumerWidget {
     this.isPlaying = false,
     required this.onTap,
     this.trailing,
+    this.dragHandle,
     this.onRemoveFromPlaylist,
   });
 
@@ -217,6 +219,7 @@ class SongTile extends ConsumerWidget {
                     icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
                     onPressed: () => _showSongOptions(context, ref),
                   ),
+                  if (dragHandle != null) dragHandle!,
                 ],
               ),
           ],

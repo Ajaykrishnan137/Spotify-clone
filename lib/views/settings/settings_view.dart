@@ -333,7 +333,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           const ListTile(
             title: Text('100% Legal Music Sources', style: TextStyle(color: AppColors.textPrimary)),
             subtitle: Text(
-              '• Jamendo Music (Creative Commons)\n• Free Music Archive (FMA)\n• Internet Archive (Audio Archive)\n• User Local Storage Files',
+              '• Jamendo Music (Creative Commons)\n• Free Music Archive (FMA)\n• Internet Archive (Audio Archive)\n• User Local Storage Files\n\nNote: SkyTune strictly uses legal, licensed, Creative Commons, and free-to-use sources. Songs not available on these platforms cannot be displayed or streamed.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
             ),
           ),

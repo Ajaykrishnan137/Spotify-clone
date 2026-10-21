@@ -7,15 +7,15 @@ import '../../views/library/library_view.dart';
 import '../../views/settings/settings_view.dart';
 import '../../views/auth/auth_view.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _searchNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _libraryNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _settingsNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> homeNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> searchNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> libraryNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> settingsNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/home'}) {
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: initialLocation,
     routes: [
       GoRoute(
@@ -28,7 +28,7 @@ GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/h
         },
         branches: [
           StatefulShellBranch(
-            navigatorKey: _homeNavigatorKey,
+            navigatorKey: homeNavigatorKey,
             routes: [
               GoRoute(
                 path: '/home',
@@ -37,7 +37,7 @@ GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/h
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: _searchNavigatorKey,
+            navigatorKey: searchNavigatorKey,
             routes: [
               GoRoute(
                 path: '/search',
@@ -46,7 +46,7 @@ GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/h
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: _libraryNavigatorKey,
+            navigatorKey: libraryNavigatorKey,
             routes: [
               GoRoute(
                 path: '/library',
@@ -55,7 +55,7 @@ GoRouter createRouter({bool isAuthenticated = true, String initialLocation = '/h
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: _settingsNavigatorKey,
+            navigatorKey: settingsNavigatorKey,
             routes: [
               GoRoute(
                 path: '/settings',

@@ -9,6 +9,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/services/cloud_catalog_service.dart';
 import '../../core/services/playlist_visibility_service.dart';
 import '../shared_widgets/app_image.dart';
+import '../../core/utils/app_snackbar.dart';
 import '../playlist/playlist_detail_view.dart';
 import 'downloaded_songs_view.dart';
 
@@ -93,42 +94,87 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     );
   }
 
-  void _showRenamePlaylistDialog(PlaylistModel playlist) {
-    final textController = TextEditingController(text: playlist.name);
+  void _showRenamePlaylistDialog({
+    required String currentName,
+    String? customId,
+    List<SongModel>? songs,
+  }) {
+    final textController = TextEditingController(text: currentName);
+    textController.selection = TextSelection(baseOffset: 0, extentOffset: currentName.length);
+    String? errorText;
+
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
-          content: TextField(
-            controller: textController,
-            autofocus: true,
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              hintText: 'New playlist name',
-              hintStyle: TextStyle(color: AppColors.textSecondary),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-              onPressed: () {
-                final newName = textController.text.trim();
-                if (newName.isNotEmpty) {
-                  ref.read(localPlaylistControllerProvider.notifier).renamePlaylist(playlist.id, newName);
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Rename', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: const Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: textController,
+                    autofocus: true,
+                    maxLength: 60,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'New playlist name',
+                      errorText: errorText,
+                      hintStyle: const TextStyle(color: AppColors.textSecondary),
+                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
+                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+                    ),
+                    onChanged: (val) {
+                      if (errorText != null) {
+                        setDialogState(() => errorText = null);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                  onPressed: () async {
+                    final newName = textController.text.trim();
+                    if (newName.isEmpty) {
+                      setDialogState(() => errorText = 'Playlist name cannot be empty');
+                      return;
+                    }
+                    if (newName.length > 60) {
+                      setDialogState(() => errorText = 'Maximum 60 characters');
+                      return;
+                    }
+
+                    if (customId != null) {
+                      await ref.read(localPlaylistControllerProvider.notifier).renamePlaylist(customId, newName);
+                    } else {
+                      // Rename default / imported playlist
+                      ref.read(hiddenPlaylistsProvider.notifier).hidePlaylist(currentName);
+                      await ref.read(localPlaylistControllerProvider.notifier).createPlaylist(
+                        newName,
+                        initialSongs: songs ?? [],
+                      );
+                    }
+
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    AppSnackBar.showInfo(
+                      context: context,
+                      message: 'Renamed to "$newName"',
+                    );
+                  },
+                  child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -180,28 +226,20 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       ref.read(hiddenPlaylistsProvider.notifier).hidePlaylist(playlist.name);
     }
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Deleted playlist "${playlist.name}"'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 5), // About 5 seconds
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: AppColors.cyanAccent,
-          onPressed: () {
-            if (playlist.isCustom && playlist.customId != null) {
-              ref.read(localPlaylistControllerProvider.notifier).createPlaylist(playlist.name).then((_) {
-                for (final song in playlist.songs) {
-                  ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(playlist.customId!, song);
-                }
-              });
-            } else {
-              ref.read(hiddenPlaylistsProvider.notifier).unhidePlaylist(playlist.name);
+    AppSnackBar.showUndo(
+      context: context,
+      message: 'Deleted playlist "${playlist.name}"',
+      onUndo: () {
+        if (playlist.isCustom && playlist.customId != null) {
+          ref.read(localPlaylistControllerProvider.notifier).createPlaylist(playlist.name).then((_) {
+            for (final song in playlist.songs) {
+              ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(playlist.customId!, song);
             }
-          },
-        ),
-      ),
+          });
+        } else {
+          ref.read(hiddenPlaylistsProvider.notifier).unhidePlaylist(playlist.name);
+        }
+      },
     );
   }
 
@@ -262,29 +300,21 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       ref.read(hiddenPlaylistsProvider.notifier).hideMultiplePlaylists(importedItems.map((i) => i.name));
     }
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Deleted ${items.length} playlists'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 5), // About 5 seconds
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: AppColors.cyanAccent,
-          onPressed: () {
-            for (final c in customItems) {
-              ref.read(localPlaylistControllerProvider.notifier).createPlaylist(c.name).then((_) {
-                for (final song in c.songs) {
-                  ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(c.customId!, song);
-                }
-              });
+    AppSnackBar.showUndo(
+      context: context,
+      message: 'Deleted ${items.length} playlists',
+      onUndo: () {
+        for (final c in customItems) {
+          ref.read(localPlaylistControllerProvider.notifier).createPlaylist(c.name).then((_) {
+            for (final song in c.songs) {
+              ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(c.customId!, song);
             }
-            if (importedItems.isNotEmpty) {
-              ref.read(hiddenPlaylistsProvider.notifier).unhideMultiplePlaylists(importedItems.map((i) => i.name));
-            }
-          },
-        ),
-      ),
+          });
+        }
+        if (importedItems.isNotEmpty) {
+          ref.read(hiddenPlaylistsProvider.notifier).unhideMultiplePlaylists(importedItems.map((i) => i.name));
+        }
+      },
     );
   }
 
@@ -301,23 +331,18 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.isCustom && item.customId != null)
-                ListTile(
-                  leading: const Icon(Icons.edit, color: AppColors.textPrimary),
-                  title: const Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showRenamePlaylistDialog(
-                      PlaylistModel(
-                        id: item.customId!,
-                        ownerId: 'local-user',
-                        name: item.name,
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      ),
-                    );
-                  },
-                ),
+              ListTile(
+                leading: const Icon(Icons.edit, color: AppColors.textPrimary),
+                title: const Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showRenamePlaylistDialog(
+                    currentName: item.name,
+                    customId: item.isCustom ? item.customId : null,
+                    songs: item.songs,
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
                 title: const Text('Delete playlist', style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.bold)),

@@ -12,6 +12,8 @@ class AppSavedState {
   final int currentIndex;
   final String currentRoute;
   final List<SongModel> recentlyPlayed;
+  final String loopMode;
+  final bool isShuffle;
 
   const AppSavedState({
     this.currentSong,
@@ -20,6 +22,8 @@ class AppSavedState {
     this.currentIndex = -1,
     this.currentRoute = '/home',
     this.recentlyPlayed = const [],
+    this.loopMode = 'all',
+    this.isShuffle = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -29,6 +33,8 @@ class AppSavedState {
     'currentIndex': currentIndex,
     'currentRoute': currentRoute,
     'recentlyPlayed': recentlyPlayed.map((s) => s.toJson()).toList(),
+    'loopMode': loopMode,
+    'isShuffle': isShuffle,
   };
 
   factory AppSavedState.fromJson(Map<String, dynamic> json) {
@@ -45,6 +51,8 @@ class AppSavedState {
               ?.map((e) => SongModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      loopMode: json['loopMode'] as String? ?? 'all',
+      isShuffle: json['isShuffle'] as bool? ?? false,
     );
   }
 }

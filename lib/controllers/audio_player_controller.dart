@@ -38,7 +38,7 @@ class PlayerStateData {
     this.queue = const [],
     this.currentIndex = -1,
     this.isShuffle = false,
-    this.loopMode = PlayerLoopMode.off,
+    this.loopMode = PlayerLoopMode.all,
     this.isLoading = false,
     this.recentlyPlayed = const [],
   });
@@ -104,12 +104,20 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     try {
       final saved = await _persistenceService.loadState();
       if (saved != null) {
+        final restoredLoop = switch (saved.loopMode) {
+          'off' => PlayerLoopMode.off,
+          'one' => PlayerLoopMode.one,
+          _ => PlayerLoopMode.all,
+        };
+
         state = state.copyWith(
           currentSong: saved.currentSong,
           position: Duration(milliseconds: saved.positionMs),
           queue: saved.queue,
           currentIndex: saved.currentIndex,
           recentlyPlayed: saved.recentlyPlayed,
+          loopMode: restoredLoop,
+          isShuffle: saved.isShuffle,
         );
 
         if (saved.currentSong != null) {
@@ -180,6 +188,12 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
   }
 
   void _saveStateToDisk() {
+    final loopStr = switch (state.loopMode) {
+      PlayerLoopMode.off => 'off',
+      PlayerLoopMode.one => 'one',
+      PlayerLoopMode.all => 'all',
+    };
+
     _persistenceService.saveState(
       AppSavedState(
         currentSong: state.currentSong,
@@ -187,6 +201,8 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
         queue: state.queue,
         currentIndex: state.currentIndex,
         recentlyPlayed: state.recentlyPlayed,
+        loopMode: loopStr,
+        isShuffle: state.isShuffle,
       ),
     );
   }
@@ -312,7 +328,20 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     int nextIdx = state.currentIndex + 1;
     if (nextIdx >= state.queue.length) {
       if (state.loopMode == PlayerLoopMode.all) {
-        nextIdx = 0;
+        if (state.isShuffle && state.queue.length > 1) {
+          // Reshuffle queue when cycle ends, without repeating the current song twice in a row
+          final lastPlayed = state.currentSong;
+          final shuffled = List<SongModel>.from(state.queue)..shuffle();
+          if (shuffled.first.id == lastPlayed?.id && shuffled.length > 1) {
+            final first = shuffled.removeAt(0);
+            shuffled.insert(1, first);
+          }
+          state = state.copyWith(queue: shuffled, currentIndex: 0);
+          await playSong(shuffled.first, queue: shuffled, index: 0);
+          return;
+        } else {
+          nextIdx = 0;
+        }
       } else {
         return;
       }
@@ -330,7 +359,9 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
   }
 
   void toggleShuffle() {
-    state = state.copyWith(isShuffle: !state.isShuffle);
+    final nextShuffle = !state.isShuffle;
+    state = state.copyWith(isShuffle: nextShuffle);
+    _saveStateToDisk();
   }
 
   void toggleLoop() {
@@ -340,6 +371,7 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
       PlayerLoopMode.one => PlayerLoopMode.off,
     };
     state = state.copyWith(loopMode: nextMode);
+    _saveStateToDisk();
   }
 
   void playNext(SongModel song) {

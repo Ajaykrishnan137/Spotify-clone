@@ -8,6 +8,7 @@ import '../../controllers/playlist_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../../core/services/playlist_visibility_service.dart';
+import '../../core/utils/app_snackbar.dart';
 import '../shared_widgets/app_image.dart';
 import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/song_picker_dialog.dart';
@@ -47,6 +48,7 @@ class PlaylistDetailView extends ConsumerStatefulWidget {
 }
 
 class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
+  late String _currentTitle;
   late List<SongModel> _currentSongs;
   late List<SongModel> _originalOrderSongs; // For Reorder Cancel
   String? _effectivePlaylistId;
@@ -61,13 +63,106 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
   @override
   void initState() {
     super.initState();
+    _currentTitle = widget.title;
     _currentSongs = List.from(widget.songs);
     _originalOrderSongs = List.from(widget.songs);
     _effectivePlaylistId = widget.playlistId;
   }
 
+  void _showRenameDialog() {
+    final textController = TextEditingController(text: _currentTitle);
+    textController.selection = TextSelection(baseOffset: 0, extentOffset: _currentTitle.length);
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: const Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: textController,
+                    autofocus: true,
+                    maxLength: 60,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'New playlist name',
+                      errorText: errorText,
+                      hintStyle: const TextStyle(color: AppColors.textSecondary),
+                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
+                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+                    ),
+                    onChanged: (val) {
+                      if (errorText != null) {
+                        setDialogState(() => errorText = null);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                  onPressed: () async {
+                    final newName = textController.text.trim();
+                    if (newName.isEmpty) {
+                      setDialogState(() => errorText = 'Playlist name cannot be empty');
+                      return;
+                    }
+                    if (newName.length > 60) {
+                      setDialogState(() => errorText = 'Maximum 60 characters');
+                      return;
+                    }
+
+                    final oldTitle = _currentTitle;
+                    if (_effectivePlaylistId != null) {
+                      await ref.read(localPlaylistControllerProvider.notifier).renamePlaylist(_effectivePlaylistId!, newName);
+                    } else {
+                      final categoryName = widget.importedCategoryName ?? oldTitle;
+                      ref.read(hiddenPlaylistsProvider.notifier).hidePlaylist(categoryName);
+                      final newId = 'pl_${DateTime.now().millisecondsSinceEpoch}';
+                      await ref.read(localPlaylistControllerProvider.notifier).createPlaylist(
+                        newName,
+                        initialSongs: _currentSongs,
+                        id: newId,
+                      );
+                      setState(() {
+                        _effectivePlaylistId = newId;
+                      });
+                    }
+
+                    setState(() {
+                      _currentTitle = newName;
+                    });
+
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    AppSnackBar.showInfo(
+                      context: context,
+                      message: 'Renamed to "$newName"',
+                    );
+                  },
+                  child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   String get _currentPlaylistIdKey {
-    return _effectivePlaylistId ?? 'imported_${widget.importedCategoryName ?? widget.title}';
+    return _effectivePlaylistId ?? 'imported_${widget.importedCategoryName ?? _currentTitle}';
   }
 
   /// Ensure we have an editable local playlist ID if this was an imported read-only category
@@ -77,7 +172,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
     }
 
     final newId = 'copy_${DateTime.now().millisecondsSinceEpoch}';
-    final copyTitle = '${widget.title} (Editable)';
+    final copyTitle = '$_currentTitle (Editable)';
     await ref.read(localPlaylistControllerProvider.notifier).createPlaylist(
       copyTitle,
       initialSongs: _currentSongs,
@@ -90,12 +185,9 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Created editable copy: "$copyTitle"'),
-          backgroundColor: AppColors.card,
-          duration: const Duration(seconds: 3),
-        ),
+      AppSnackBar.showInfo(
+        context: context,
+        message: 'Created editable copy: "$copyTitle"',
       );
     }
     return newId;
@@ -120,27 +212,19 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Removed "${song.title}" from ${widget.title}'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: AppColors.cyanAccent,
-          onPressed: () async {
-            setState(() {
-              if (index >= 0 && index <= _currentSongs.length) {
-                _currentSongs.insert(index, song);
-              } else {
-                _currentSongs.add(song);
-              }
-            });
-            await ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(effectiveId, song);
-          },
-        ),
-      ),
+    AppSnackBar.showUndo(
+      context: context,
+      message: 'Removed "${song.title}" from $_currentTitle',
+      onUndo: () async {
+        setState(() {
+          if (index >= 0 && index <= _currentSongs.length) {
+            _currentSongs.insert(index, song);
+          } else {
+            _currentSongs.add(song);
+          }
+        });
+        await ref.read(localPlaylistControllerProvider.notifier).addSongToPlaylist(effectiveId, song);
+      },
     );
   }
 
@@ -161,23 +245,15 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Removed ${removed.length} songs from ${widget.title}'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: AppColors.cyanAccent,
-          onPressed: () async {
-            setState(() {
-              _currentSongs.addAll(removed);
-            });
-            await ref.read(localPlaylistControllerProvider.notifier).addMultipleSongsToPlaylist(effectiveId, removed);
-          },
-        ),
-      ),
+    AppSnackBar.showUndo(
+      context: context,
+      message: 'Removed ${removed.length} songs from $_currentTitle',
+      onUndo: () async {
+        setState(() {
+          _currentSongs.addAll(removed);
+        });
+        await ref.read(localPlaylistControllerProvider.notifier).addMultipleSongsToPlaylist(effectiveId, removed);
+      },
     );
   }
 
@@ -196,24 +272,17 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
         await ref.read(localPlaylistControllerProvider.notifier).addMultipleSongsToPlaylist(effectiveId, selectedSongs);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Added ${selectedSongs.length} song(s) to ${widget.title}'),
-              backgroundColor: AppColors.card,
-              duration: const Duration(seconds: 4),
-              action: SnackBarAction(
-                label: 'UNDO',
-                textColor: AppColors.cyanAccent,
-                onPressed: () async {
-                  setState(() {
-                    _currentSongs.removeWhere((s) => selectedSongs.any((sel) => sel.id == s.id));
-                  });
-                  for (final s in selectedSongs) {
-                    await ref.read(localPlaylistControllerProvider.notifier).removeSongFromPlaylist(effectiveId, s.id);
-                  }
-                },
-              ),
-            ),
+          AppSnackBar.showUndo(
+            context: context,
+            message: 'Added ${selectedSongs.length} song(s) to $_currentTitle',
+            onUndo: () async {
+              setState(() {
+                _currentSongs.removeWhere((s) => selectedSongs.any((sel) => sel.id == s.id));
+              });
+              for (final s in selectedSongs) {
+                await ref.read(localPlaylistControllerProvider.notifier).removeSongFromPlaylist(effectiveId, s.id);
+              }
+            },
           );
         }
       },
@@ -321,28 +390,20 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
 
     Navigator.pop(context);
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Deleted playlist "$deletedTitle"'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: AppColors.cyanAccent,
-          onPressed: () {
-            if (isCustom && playlistId != null) {
-              ref.read(localPlaylistControllerProvider.notifier).createPlaylist(
-                deletedTitle,
-                initialSongs: cachedSongs,
-                id: playlistId,
-              );
-            } else {
-              ref.read(hiddenPlaylistsProvider.notifier).unhidePlaylist(categoryName);
-            }
-          },
-        ),
-      ),
+    AppSnackBar.showUndo(
+      context: context,
+      message: 'Deleted playlist "$deletedTitle"',
+      onUndo: () {
+        if (isCustom && playlistId != null) {
+          ref.read(localPlaylistControllerProvider.notifier).createPlaylist(
+            deletedTitle,
+            initialSongs: cachedSongs,
+            id: playlistId,
+          );
+        } else {
+          ref.read(hiddenPlaylistsProvider.notifier).unhidePlaylist(categoryName);
+        }
+      },
     );
   }
 
@@ -368,26 +429,7 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
             pinned: true,
             backgroundColor: AppColors.surface,
             actions: [
-              if (_isReorderMode) ...[
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentSongs = List.from(_originalOrderSongs);
-                      _isReorderMode = false;
-                    });
-                  },
-                  child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _originalOrderSongs = List.from(_currentSongs);
-                      _isReorderMode = false;
-                    });
-                  },
-                  child: const Text('Done', style: TextStyle(color: AppColors.cyanAccent, fontWeight: FontWeight.bold)),
-                ),
-              ] else if (_isMultiSelect) ...[
+              if (_isMultiSelect) ...[
                 IconButton(
                   icon: const Icon(Icons.delete, color: Color(0xFFFF6B6B)),
                   tooltip: 'Remove selected (${_selectedSongIds.length})',
@@ -435,18 +477,6 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                   }).toList(),
                 ),
 
-                // Reorder Mode Toggle Button
-                IconButton(
-                  icon: const Icon(Icons.reorder, color: Colors.white),
-                  tooltip: 'Reorder playlist',
-                  onPressed: () {
-                    setState(() {
-                      _isReorderMode = true;
-                      _originalOrderSongs = List.from(_currentSongs);
-                    });
-                  },
-                ),
-
                 // Add Songs Picker Button
                 IconButton(
                   icon: const Icon(Icons.add, color: Colors.white, size: 28),
@@ -465,16 +495,28 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                   },
                 ),
 
-                // Delete Playlist Menu
+                // More Menu with Rename & Delete Playlist
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white),
                   color: AppColors.card,
                   onSelected: (val) {
-                    if (val == 'delete_playlist') {
+                    if (val == 'rename_playlist') {
+                      _showRenameDialog();
+                    } else if (val == 'delete_playlist') {
                       _confirmDeleteEntirePlaylist();
                     }
                   },
                   itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'rename_playlist',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, color: AppColors.textPrimary, size: 20),
+                          SizedBox(width: 8),
+                          Text('Rename playlist', style: TextStyle(color: AppColors.textPrimary)),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'delete_playlist',
                       child: Row(
@@ -493,11 +535,25 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
               ],
             ],
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                _isReorderMode
-                    ? 'Reorder Songs'
-                    : (_isMultiSelect ? '${_selectedSongIds.length} Selected' : widget.title),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+              title: GestureDetector(
+                onTap: _isMultiSelect ? null : _showRenameDialog,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _isMultiSelect ? '${_selectedSongIds.length} Selected' : _currentTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                      ),
+                    ),
+                    if (!_isMultiSelect) ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.edit_outlined, size: 14, color: Colors.white70),
+                    ],
+                  ],
+                ),
               ),
               background: Stack(
                 fit: StackFit.expand,
@@ -748,97 +804,93 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                 ),
               ),
             )
-          else if (_isReorderMode)
-            // Reorderable List view with drag handles, shadow, lift effect
-            SliverToBoxAdapter(
-              child: ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _currentSongs.length,
-                onReorder: _onReorderSongs,
-                proxyDecorator: (child, index, animation) {
-                  return AnimatedBuilder(
-                    animation: animation,
-                    builder: (context, child) {
-                      final double elevation = Tween<double>(begin: 0, end: 8).animate(animation).value;
-                      return Material(
-                        elevation: elevation,
-                        color: AppColors.card.withOpacity(0.95),
-                        shadowColor: Colors.black87,
-                        borderRadius: BorderRadius.circular(8),
-                        child: child,
-                      );
-                    },
-                    child: child,
-                  );
-                },
-                itemBuilder: (context, index) {
-                  final song = _currentSongs[index];
-                  return ListTile(
-                    key: ValueKey('reorder_${song.id}'),
-                    leading: AppImage(url: song.coverUrl, width: 44, height: 44, borderRadius: Dimensions.radiusSmall),
+          else
+            SliverReorderableList(
+              itemCount: _currentSongs.length,
+              onReorder: _onReorderSongs,
+              proxyDecorator: (child, index, animation) {
+                return AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, child) {
+                    final double elevation = Tween<double>(begin: 0, end: 10).animate(animation).value;
+                    return Material(
+                      elevation: elevation,
+                      color: AppColors.card.withOpacity(0.96),
+                      shadowColor: Colors.black.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                      child: child,
+                    );
+                  },
+                  child: child,
+                );
+              },
+              itemBuilder: (context, index) {
+                final song = _currentSongs[index];
+                final isSelected = _selectedSongIds.contains(song.id);
+
+                if (_isMultiSelect) {
+                  return CheckboxListTile(
+                    key: ValueKey('multiselect_${song.id}'),
+                    value: isSelected,
+                    activeColor: AppColors.cyanAccent,
+                    checkColor: Colors.black,
                     title: Text(
                       song.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
                       song.artist,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: const TextStyle(color: AppColors.textSecondary),
                     ),
-                    trailing: ReorderableDragStartListener(
-                      index: index,
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.drag_handle, color: AppColors.cyanAccent, size: 24),
-                      ),
+                    secondary: AppImage(url: song.coverUrl, width: 44, height: 44),
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedSongIds.add(song.id);
+                        } else {
+                          _selectedSongIds.remove(song.id);
+                        }
+                      });
+                    },
+                  );
+                }
+
+                Widget dragHandleWidget;
+                if (_sortMode == PlaylistSortMode.custom) {
+                  dragHandleWidget = ReorderableDragStartListener(
+                    index: index,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                      child: Icon(Icons.drag_handle, color: AppColors.textSecondary, size: 22),
                     ),
                   );
-                },
-              ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final song = _currentSongs[index];
-                  final isSelected = _selectedSongIds.contains(song.id);
+                } else {
+                  dragHandleWidget = InkWell(
+                    onTap: () {
+                      AppSnackBar.showUndo(
+                        context: context,
+                        message: 'Switch to Custom order to rearrange',
+                        duration: const Duration(seconds: 4),
+                        onUndo: () => _applySort(PlaylistSortMode.custom),
+                      );
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                      child: Icon(Icons.drag_handle, color: AppColors.textMuted, size: 22),
+                    ),
+                  );
+                }
 
-                  if (_isMultiSelect) {
-                    return CheckboxListTile(
-                      value: isSelected,
-                      activeColor: AppColors.cyanAccent,
-                      checkColor: Colors.black,
-                      title: Text(
-                        song.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        song.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.textSecondary),
-                      ),
-                      secondary: AppImage(url: song.coverUrl, width: 44, height: 44),
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _selectedSongIds.add(song.id);
-                          } else {
-                            _selectedSongIds.remove(song.id);
-                          }
-                        });
-                      },
-                    );
-                  }
-
-                  return Dismissible(
-                    key: Key('playlist_song_${song.id}_$index'),
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey('song_row_${song.id}'),
+                  index: index,
+                  enabled: _sortMode == PlaylistSortMode.custom,
+                  child: Dismissible(
+                    key: ValueKey('dismiss_song_${song.id}'),
                     direction: DismissDirection.endToStart,
                     background: Container(
                       alignment: Alignment.centerRight,
@@ -860,8 +912,10 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                       _removeSong(song);
                     },
                     child: SongTile(
+                      key: ValueKey('tile_${song.id}'),
                       song: song,
                       isPlaying: playerState.currentSong?.id == song.id,
+                      dragHandle: dragHandleWidget,
                       onRemoveFromPlaylist: () => _removeSong(song),
                       onTap: () {
                         ref.read(audioPlayerControllerProvider.notifier).playSong(
@@ -871,10 +925,9 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                             );
                       },
                     ),
-                  );
-                },
-                childCount: _currentSongs.length,
-              ),
+                  ),
+                );
+              },
             ),
           const SliverToBoxAdapter(
             child: SizedBox(height: Dimensions.miniPlayerHeight + Dimensions.space64),

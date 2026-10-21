@@ -34,13 +34,14 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
   final TextEditingController _searchController = TextEditingController();
   DownloadSortOption _sortOption = DownloadSortOption.recent;
   List<SongModel> _verifiedSongs = [];
-  bool _isLoading = true;
+  bool _isInitialLoading = true;
+  bool _isRefreshing = false;
   int _totalStorageBytes = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadAndVerifyDownloads();
+    _loadAndVerifyDownloads(isFirstLoad: true);
   }
 
   @override
@@ -49,8 +50,12 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
     super.dispose();
   }
 
-  Future<void> _loadAndVerifyDownloads() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadAndVerifyDownloads({bool isFirstLoad = false}) async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    if (isFirstLoad && _verifiedSongs.isEmpty) {
+      setState(() => _isInitialLoading = true);
+    }
 
     try {
       final songsDao = ref.read(songsDaoProvider);
@@ -89,18 +94,39 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
         }
       }
 
+      // Check if list actually changed before triggering full state update
+      final bool hasChanged = verified.length != _verifiedSongs.length ||
+          totalBytes != _totalStorageBytes ||
+          !_areSongListsEqual(_verifiedSongs, verified);
+
       if (mounted) {
         setState(() {
-          _verifiedSongs = verified;
-          _totalStorageBytes = totalBytes;
-          _isLoading = false;
+          if (hasChanged || isFirstLoad) {
+            _verifiedSongs = verified;
+            _totalStorageBytes = totalBytes;
+          }
+          _isInitialLoading = false;
+          _isRefreshing = false;
         });
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isInitialLoading = false;
+          _isRefreshing = false;
+        });
       }
     }
+  }
+
+  bool _areSongListsEqual(List<SongModel> a, List<SongModel> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].localPath != b[i].localPath) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<SongModel> _getFilteredAndSortedSongs() {
@@ -130,11 +156,74 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
     return list;
   }
 
+  Widget _buildSkeletonLoader() {
+    return ListView.builder(
+      itemCount: 8,
+      padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 8),
+      itemBuilder: (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+              ),
+            ),
+            const SizedBox(width: Dimensions.space12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 14,
+                    width: 140,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    height: 11,
+                    width: 90,
+                    decoration: BoxDecoration(
+                      color: AppColors.elevated,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Listen to download tasks so when a new download completes, we refresh
+    // Only listen for transitions to DownloadStatus.downloaded or deletions
     ref.listen<Map<String, DownloadTaskState>>(downloadControllerProvider, (prev, next) {
-      _loadAndVerifyDownloads();
+      final prevMap = prev ?? {};
+      bool shouldRefresh = false;
+      for (final entry in next.entries) {
+        final prevStatus = prevMap[entry.key]?.status;
+        final nextStatus = entry.value.status;
+        if (prevStatus != DownloadStatus.downloaded && nextStatus == DownloadStatus.downloaded) {
+          shouldRefresh = true;
+          break;
+        }
+        if (prevStatus == DownloadStatus.downloaded && nextStatus == DownloadStatus.notDownloaded) {
+          shouldRefresh = true;
+          break;
+        }
+      }
+      if (shouldRefresh) {
+        _loadAndVerifyDownloads();
+      }
     });
 
     final playerState = ref.watch(audioPlayerControllerProvider);
@@ -182,12 +271,12 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
             tooltip: 'Refresh & Verify Files',
-            onPressed: _loadAndVerifyDownloads,
+            onPressed: () => _loadAndVerifyDownloads(isFirstLoad: false),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.cyanAccent))
+      body: _isInitialLoading
+          ? _buildSkeletonLoader()
           : Column(
               children: [
                 // Storage and stats bar
@@ -278,7 +367,7 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
                               itemBuilder: (context, index) {
                                 final song = displayedSongs[index];
                                 return Dismissible(
-                                  key: Key('downloaded_${song.id}'),
+                                  key: ValueKey('downloaded_${song.id}'),
                                   direction: DismissDirection.endToStart,
                                   background: Container(
                                     alignment: Alignment.centerRight,
@@ -294,18 +383,32 @@ class _DownloadedSongsViewState extends ConsumerState<DownloadedSongsView> {
                                     ),
                                   ),
                                   onDismissed: (_) async {
-                                    await ref.read(downloadControllerProvider.notifier).deleteDownload(song.id);
-                                    _loadAndVerifyDownloads();
+                                    final removedSong = song;
+                                    setState(() {
+                                      _verifiedSongs.removeWhere((s) => s.id == removedSong.id);
+                                    });
+                                    await ref.read(downloadControllerProvider.notifier).deleteDownload(removedSong.id);
+                                    _loadAndVerifyDownloads(isFirstLoad: false);
                                     if (context.mounted) {
+                                      ScaffoldMessenger.of(context).clearSnackBars();
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text('Deleted "${song.title}" from downloads'),
+                                          content: Text('Deleted "${removedSong.title}" from downloads'),
                                           backgroundColor: AppColors.surface,
+                                          behavior: SnackBarBehavior.floating,
+                                          margin: const EdgeInsets.only(
+                                            left: 16,
+                                            right: 16,
+                                            bottom: Dimensions.miniPlayerHeight + 16,
+                                          ),
+                                          duration: const Duration(seconds: 4),
+                                          dismissDirection: DismissDirection.horizontal,
                                         ),
                                       );
                                     }
                                   },
                                   child: SongTile(
+                                    key: ValueKey('song_tile_${song.id}'),
                                     song: song,
                                     isPlaying: playerState.currentSong?.id == song.id,
                                     onTap: () {

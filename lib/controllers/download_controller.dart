@@ -230,7 +230,17 @@ class DownloadController extends StateNotifier<Map<String, DownloadTaskState>> {
         PlaylistDownloadProgress(playlistId: playlistId);
   }
 
+  final Map<String, int> _lastProgressUpdateMs = {};
+
   void _updateProgress(String songId, double progress) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final last = _lastProgressUpdateMs[songId] ?? 0;
+    // Throttle intermediate updates to at most once per 300ms, but always allow 0.0, 1.0 or large jumps
+    if (progress < 1.0 && progress > 0.0 && (now - last) < 300) {
+      return;
+    }
+    _lastProgressUpdateMs[songId] = now;
+
     final current = state[songId] ?? DownloadTaskState(songId: songId);
     final updated = current.copyWith(
       status: DownloadStatus.downloading,

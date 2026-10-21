@@ -200,34 +200,56 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        // Format and Bitrate Quality badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                            border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.high_quality, size: 14, color: AppColors.cyanAccent),
-                              const SizedBox(width: 4),
-                              Text(
-                                song.storagePath.endsWith('.flac')
-                                    ? 'FLAC • Lossless'
-                                    : (song.storagePath.endsWith('.ogg')
-                                        ? 'OGG • 320 kbps'
-                                        : 'MP3 • 320 kbps High Quality'),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.cyanAccent,
-                                  letterSpacing: 0.3,
+                        // Format and Bitrate Quality badge (Compact, responsive, never overflows)
+                        Builder(
+                          builder: (context) {
+                            final isFlac = song.storagePath.endsWith('.flac');
+                            final isOgg = song.storagePath.endsWith('.ogg');
+                            final isLossless = isFlac;
+
+                            final formatText = isFlac ? 'FLAC' : (isOgg ? 'OGG' : 'MP3');
+                            final detailText = isLossless ? 'Lossless' : '320 kbps';
+
+                            final badgeColor = isLossless ? AppColors.softGold : AppColors.cyanAccent;
+
+                            return ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: MediaQuery.of(context).size.width * 0.55,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface.withOpacity(0.85),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: badgeColor.withOpacity(0.5), width: 1),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isLossless ? Icons.stars_rounded : Icons.high_quality_rounded,
+                                      size: 13,
+                                      color: badgeColor,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        '$formatText · $detailText',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: badgeColor,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ],
                     ),
