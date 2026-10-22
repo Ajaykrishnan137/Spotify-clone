@@ -364,6 +364,11 @@ class AudioPlayerController extends StateNotifier<PlayerStateData> {
     _saveStateToDisk();
   }
 
+  void setLoopMode(PlayerLoopMode mode) {
+    state = state.copyWith(loopMode: mode);
+    _saveStateToDisk();
+  }
+
   void toggleLoop() {
     final nextMode = switch (state.loopMode) {
       PlayerLoopMode.off => PlayerLoopMode.all,

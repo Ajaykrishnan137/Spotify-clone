@@ -20,6 +20,7 @@ class SongTile extends ConsumerWidget {
   final Widget? trailing;
   final Widget? dragHandle;
   final VoidCallback? onRemoveFromPlaylist;
+  final bool showMetadataDetails;
 
   const SongTile({
     super.key,
@@ -29,6 +30,7 @@ class SongTile extends ConsumerWidget {
     this.trailing,
     this.dragHandle,
     this.onRemoveFromPlaylist,
+    this.showMetadataDetails = false,
   });
 
   void _showSongOptions(BuildContext context, WidgetRef ref) {
@@ -188,17 +190,32 @@ class SongTile extends ConsumerWidget {
                       ],
                       Expanded(
                         child: Text(
-                          song.artist,
+                          showMetadataDetails
+                              ? '${song.artist} • ${song.album}${song.releaseDate != null ? ' (${song.releaseDate})' : ''}'
+                              : song.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: AppColors.textSecondary,
-                            fontSize: 13,
+                            fontSize: 12.5,
                           ),
                         ),
                       ),
                     ],
                   ),
+                  if (showMetadataDetails && song.source != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      song.source!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.cyanAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

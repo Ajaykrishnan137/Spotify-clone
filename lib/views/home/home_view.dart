@@ -14,6 +14,7 @@ import '../../core/services/in_app_notifications_service.dart';
 import '../shared_widgets/song_card.dart';
 import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/app_image.dart';
+import '../shared_widgets/artist_avatar.dart';
 import '../shared_widgets/spotify_logo.dart';
 import '../playlist/playlist_detail_view.dart';
 import 'artist_detail_view.dart';
@@ -364,21 +365,33 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.35),
-                                borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                              ),
-                              child: const Text(
-                                'SKYTUNE MIX',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.8,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.35),
+                                    borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                                  ),
+                                  child: const Text(
+                                    'SKYTUNE MIX',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                if (songs.isNotEmpty)
+                                  ArtistAvatar(
+                                    artistName: songs.first.artist.split('/').first.trim(),
+                                    size: 26,
+                                    borderWidth: 1,
+                                    borderColor: Colors.white60,
+                                  ),
+                              ],
                             ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -663,26 +676,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
                   },
                   child: Column(
                     children: [
-                      Container(
-                        width: 76,
-                        height: 76,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.cyanAccent.withOpacity(0.12),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: AppImage(
-                            url: artist.avatarUrl,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                      ArtistAvatar(
+                        artistName: artist.name,
+                        avatarUrl: artist.avatarUrl,
+                        size: 76,
+                        borderWidth: 1.5,
+                        borderColor: AppColors.cyanAccent.withOpacity(0.4),
                       ),
                       const SizedBox(height: Dimensions.space8),
                       Text(
@@ -748,12 +747,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.accent, size: 24),
+                  Icon(Icons.wifi_off_rounded, color: AppColors.cyanAccent, size: 24),
                   SizedBox(width: Dimensions.space12),
                   Expanded(
                     child: Text(
-                      'No online Tamil results found at this time. Only songs from legal, licensed, or free-to-use sources appear.',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      'You are offline or online sources are temporarily unreachable. You can still play all cached playlists and downloaded songs in your Library.',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.3),
                     ),
                   ),
                 ],

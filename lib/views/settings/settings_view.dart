@@ -337,6 +337,13 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
             ),
           ),
+          const ListTile(
+            title: Text('Image & Artist Media Attribution', style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: Text(
+              'Artist profile photos and cover visuals are sourced under open licenses from Jamendo Music (Creative Commons) and Wikimedia Commons (CC-BY-SA 3.0/4.0 & Public Domain). All credits belong to their respective creators and license holders. Fallbacks use procedurally generated SkyTune gradients.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ),
           ListTile(
             title: const Text(AppStrings.signOut, style: TextStyle(color: AppColors.textPrimary)),
             trailing: const Icon(Icons.logout, color: AppColors.textSecondary),

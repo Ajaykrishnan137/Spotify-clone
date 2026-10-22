@@ -13,6 +13,9 @@ class SongModel extends Equatable {
   final bool isDownloaded;
   final DateTime? downloadedAt;
   final String genre;
+  final String? releaseDate;
+  final int popularity;
+  final String? source;
 
   const SongModel({
     required this.id,
@@ -27,6 +30,9 @@ class SongModel extends Equatable {
     this.isDownloaded = false,
     this.downloadedAt,
     this.genre = 'General',
+    this.releaseDate,
+    this.popularity = 0,
+    this.source,
   });
 
   SongModel copyWith({
@@ -42,6 +48,9 @@ class SongModel extends Equatable {
     bool? isDownloaded,
     DateTime? downloadedAt,
     String? genre,
+    String? releaseDate,
+    int? popularity,
+    String? source,
   }) {
     return SongModel(
       id: id ?? this.id,
@@ -56,6 +65,9 @@ class SongModel extends Equatable {
       isDownloaded: isDownloaded ?? this.isDownloaded,
       downloadedAt: downloadedAt ?? this.downloadedAt,
       genre: genre ?? this.genre,
+      releaseDate: releaseDate ?? this.releaseDate,
+      popularity: popularity ?? this.popularity,
+      source: source ?? this.source,
     );
   }
 
@@ -75,6 +87,9 @@ class SongModel extends Equatable {
           ? DateTime.tryParse(json['downloaded_at'] as String) 
           : null,
       genre: json['genre'] as String? ?? 'General',
+      releaseDate: json['release_date'] as String?,
+      popularity: (json['popularity'] as num?)?.toInt() ?? 0,
+      source: json['source'] as String?,
     );
   }
 
@@ -92,6 +107,9 @@ class SongModel extends Equatable {
       'is_downloaded': isDownloaded,
       'downloaded_at': downloadedAt?.toIso8601String(),
       'genre': genre,
+      'release_date': releaseDate,
+      'popularity': popularity,
+      'source': source,
     };
   }
 
@@ -109,5 +127,8 @@ class SongModel extends Equatable {
         isDownloaded,
         downloadedAt,
         genre,
+        releaseDate,
+        popularity,
+        source,
       ];
 }

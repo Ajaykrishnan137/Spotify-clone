@@ -105,6 +105,8 @@ class OnlineMusicSearchService {
         }
 
         final songId = (item['id'] ?? DateTime.now().millisecondsSinceEpoch).toString();
+        final releaseDate = (item['year'] ?? moreInfo['release_date'] ?? '').toString();
+        final playCount = int.tryParse((moreInfo['play_count'] ?? 0).toString()) ?? 0;
 
         songs.add(
           SongModel(
@@ -116,6 +118,9 @@ class OnlineMusicSearchService {
             coverUrl: coverUrl,
             storagePath: streamUrl,
             genre: (item['language'] as String? ?? 'New Release').toUpperCase(),
+            releaseDate: releaseDate.isNotEmpty ? releaseDate : null,
+            popularity: playCount,
+            source: 'Legal Licensed Stream',
           ),
         );
       }

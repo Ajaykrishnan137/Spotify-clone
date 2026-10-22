@@ -30,35 +30,35 @@ class HomeContentService {
   static const List<ArtistInfo> popularArtists = [
     ArtistInfo(
       name: 'Sid Sriram',
-      avatarUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Sid_Sriram_at_Mersal_Audio_Launch.jpg/500px-Sid_Sriram_at_Mersal_Audio_Launch.jpg',
     ),
     ArtistInfo(
       name: 'Pradeep Kumar',
-      avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Pradeep_Kumar_Singer.jpg/500px-Pradeep_Kumar_Singer.jpg',
     ),
     ArtistInfo(
       name: 'Harris Jayaraj',
-      avatarUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg/500px-Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg',
     ),
     ArtistInfo(
       name: 'Sai Abhyankar',
-      avatarUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Sai_Abhyankkar.jpg/500px-Sai_Abhyankkar.jpg',
     ),
     ArtistInfo(
       name: 'Anirudh Ravichander',
-      avatarUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg/500px-Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg',
     ),
     ArtistInfo(
       name: 'Lana Del Rey',
-      avatarUrl: 'https://images.unsplash.com/photo-1526478806334-5fd488fcaabc?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg/500px-Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg',
     ),
     ArtistInfo(
       name: 'A.R. Rahman',
-      avatarUrl: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg/500px-A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg',
     ),
     ArtistInfo(
       name: 'K.S. Chithra',
-      avatarUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&q=80',
+      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/K._S._Chithra_2019.jpg/500px-K._S._Chithra_2019.jpg',
     ),
   ];
 

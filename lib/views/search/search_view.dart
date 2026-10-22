@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/song_model.dart';
 import '../../controllers/audio_player_controller.dart';
+import '../../controllers/playlist_controller.dart';
+import '../../controllers/download_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/dimensions.dart';
 import '../shared_widgets/song_tile.dart';
 import '../../core/services/cloud_catalog_service.dart';
 import '../../core/services/legal_search_engine_service.dart';
+import '../../core/services/query_intent_engine.dart';
+import '../../core/services/fuzzy_matcher.dart';
 import '../playlist/playlist_detail_view.dart';
+import 'generated_playlist_card.dart';
 
 class SearchView extends ConsumerStatefulWidget {
   const SearchView({super.key});
@@ -21,12 +26,23 @@ class _SearchViewState extends ConsumerState<SearchView> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   bool _isLoading = false;
+  int _searchRequestId = 0;
 
   List<SongModel> _searchResult = [];
   String _selectedSourceFilter = 'All';
   String _selectedQualityFilter = 'All';
+  QueryIntentResult? _currentIntent;
+  String? _spellingSuggestion;
+  List<String> _autocompleteSuggestions = [];
 
-  final List<String> _recentSearches = ['With Love', 'Pradeep Kumar', 'Sid Sriram', 'Tamil Melody', 'Jamendo Acoustic'];
+  final List<String> _recentSearches = [
+    'Tamil new songs',
+    'Travelling songs',
+    'Sleep songs',
+    'With Love',
+    'Pradeep Kumar',
+    'Sid Sriram',
+  ];
 
   static const List<Map<String, dynamic>> _browseGenres = [
     {'title': 'Pop & Melody', 'color': Color(0xFFE91E63), 'icon': Icons.music_note},
@@ -46,26 +62,79 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    // Fast autocomplete updates
+    _updateAutocomplete(query);
+
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _performSearch(query);
     });
   }
 
+  void _updateAutocomplete(String query) {
+    final clean = query.trim().toLowerCase();
+    if (clean.length < 2) {
+      if (_autocompleteSuggestions.isNotEmpty) {
+        setState(() => _autocompleteSuggestions = []);
+      }
+      return;
+    }
+
+    const standardSuggestions = [
+      'Tamil new songs',
+      'Tamil trending songs',
+      'Travelling songs',
+      'Sleep songs',
+      'Workout songs',
+      'Romantic songs',
+      'Chill vibes',
+      '90s tamil hits',
+      'Sid Sriram hits',
+      'Pradeep Kumar melody',
+      'Harris Jayaraj hits',
+      'With Love songs',
+      'Lana Del Rey acoustic',
+      'Acoustic guitar melodies',
+      'Focus study beats',
+    ];
+
+    final matches = standardSuggestions.where((s) {
+      return FuzzyMatcher.normalize(s).contains(FuzzyMatcher.normalize(clean));
+    }).take(4).toList();
+
+    setState(() {
+      _autocompleteSuggestions = matches;
+    });
+  }
+
   Future<void> _performSearch(String query) async {
     final cleanQuery = query.trim();
+    final requestId = ++_searchRequestId;
+
     if (cleanQuery.isEmpty) {
       setState(() {
         _searchResult = [];
         _isLoading = false;
+        _currentIntent = null;
+        _spellingSuggestion = null;
       });
       return;
     }
 
+    // Intent detection
+    final intent = QueryIntentEngine.analyzeQuery(cleanQuery);
+
     setState(() {
       _isLoading = true;
+      _currentIntent = intent;
     });
 
     final catalog = await ref.read(cloudCatalogServiceProvider).getCatalog();
+
+    // Check spelling suggestions from catalog titles and artists
+    final candidatePool = catalog.map((s) => s.title).followedBy(catalog.map((s) => s.artist));
+    final suggestion = FuzzyMatcher.findSpellingSuggestion(cleanQuery, candidatePool);
+
     final result = await LegalSearchEngineService.searchAllSources(
       query: cleanQuery,
       localCatalog: catalog,
@@ -73,25 +142,79 @@ class _SearchViewState extends ConsumerState<SearchView> {
       qualityFilter: _selectedQualityFilter != 'All' ? _selectedQualityFilter : null,
     );
 
-    if (mounted) {
-      setState(() {
-        _searchResult = result;
-        _isLoading = false;
-      });
-    }
+    // Cancel outdated requests so results never flicker or show stale data
+    if (!mounted || requestId != _searchRequestId) return;
+
+    setState(() {
+      _searchResult = result;
+      _isLoading = false;
+      _spellingSuggestion = suggestion;
+    });
   }
 
   void _onSearchSubmitted(String query) {
     final clean = query.trim();
-    if (clean.isNotEmpty && !_recentSearches.contains(clean)) {
+    if (clean.isNotEmpty) {
       setState(() {
+        _recentSearches.remove(clean);
         _recentSearches.insert(0, clean);
         if (_recentSearches.length > 8) _recentSearches.removeLast();
+        _autocompleteSuggestions = [];
       });
     }
   }
 
-  Widget _buildSingleSongsList(AudioPlayerController playerController, PlayerStateData playerState) {
+  void _saveGeneratedPlaylist() async {
+    if (_searchResult.isEmpty || _currentIntent == null) return;
+    final playlistTitle = _currentIntent!.title;
+    final playlistController = ref.read(localPlaylistControllerProvider.notifier);
+
+    await playlistController.createPlaylist(
+      playlistTitle,
+      initialSongs: _searchResult,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved "$playlistTitle" to your library!'),
+          backgroundColor: AppColors.cyanAccent,
+          action: SnackBarAction(
+            label: 'View',
+            textColor: Colors.black,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PlaylistDetailView(
+                    title: playlistTitle,
+                    subtitle: 'Saved Auto-Generated Playlist',
+                    songs: _searchResult,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  void _downloadAllSongs() {
+    if (_searchResult.isEmpty) return;
+    final downloadNotifier = ref.read(downloadControllerProvider.notifier);
+    for (final song in _searchResult) {
+      downloadNotifier.startDownload(song);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Downloading ${_searchResult.length} legal tracks for offline play...'),
+        backgroundColor: AppColors.cyanAccent,
+      ),
+    );
+  }
+
+  Widget _buildSearchResults(AudioPlayerController playerController, PlayerStateData playerState) {
     if (_searchResult.isEmpty && !_isLoading) {
       return Center(
         child: Padding(
@@ -107,14 +230,27 @@ class _SearchViewState extends ConsumerState<SearchView> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'SkyTune searches across all legal sources (Local files, Jamendo, Free Music Archive, Internet Archive).\nTry checking for typos or searching by artist or movie.',
+                'SkyTune searches across all legal sources (Local files, Jamendo, Free Music Archive, Internet Archive).\nTry checking for typos or searching by mood, artist, or movie.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
+              if (_spellingSuggestion != null) ...[
+                const SizedBox(height: 14),
+                ActionChip(
+                  backgroundColor: AppColors.card,
+                  avatar: const Icon(Icons.auto_fix_high, size: 16, color: AppColors.cyanAccent),
+                  label: Text('Did you mean "${_spellingSuggestion}"?',
+                      style: const TextStyle(color: AppColors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    _searchController.text = _spellingSuggestion!;
+                    _performSearch(_spellingSuggestion!);
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
-                children: ['Acoustic', 'Chill', 'Melody', 'Safar', 'Banger'].map((hint) {
+                children: ['Travelling songs', 'Tamil new songs', 'Sleep songs', 'With Love', 'Chill'].map((hint) {
                   return ActionChip(
                     backgroundColor: AppColors.card,
                     label: Text('Try "$hint"', style: const TextStyle(color: AppColors.cyanAccent, fontSize: 12)),
@@ -131,18 +267,72 @@ class _SearchViewState extends ConsumerState<SearchView> {
       );
     }
 
+    final bool isPlaylistQuery = _currentIntent != null && _currentIntent!.type == QueryIntentType.playlistType;
+    final relatedList = _currentIntent?.relatedPlaylists ?? [];
+
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _searchResult.length,
+      itemCount: _searchResult.length + (isPlaylistQuery ? 1 : 0) + (isPlaylistQuery && relatedList.isNotEmpty ? 1 : 0),
       padding: const EdgeInsets.only(bottom: Dimensions.miniPlayerHeight + Dimensions.space64),
       itemBuilder: (context, index) {
-        final song = _searchResult[index];
+        // 1. Auto-generated playlist card at the very top for playlist-type queries
+        if (isPlaylistQuery && index == 0) {
+          return GeneratedPlaylistCard(
+            title: _currentIntent!.title,
+            songs: _searchResult,
+            onPlay: () {
+              _onSearchSubmitted(_searchController.text);
+              // Tapping Play sets whole list as queue with Repeat All
+              playerController.setLoopMode(PlayerLoopMode.all);
+              playerController.playSong(_searchResult.first, queue: _searchResult, index: 0);
+            },
+            onShuffle: () {
+              _onSearchSubmitted(_searchController.text);
+              final shuffled = List<SongModel>.from(_searchResult)..shuffle();
+              playerController.setLoopMode(PlayerLoopMode.all);
+              playerController.playSong(shuffled.first, queue: shuffled, index: 0);
+            },
+            onSave: _saveGeneratedPlaylist,
+            onDownloadAll: _downloadAllSongs,
+          );
+        }
+
+        // 2. Optional compact horizontal row of "Related playlists" under the main card
+        if (isPlaylistQuery && relatedList.isNotEmpty && index == 1) {
+          return Container(
+            height: 38,
+            margin: const EdgeInsets.only(bottom: 12, left: Dimensions.space16, right: Dimensions.space16),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: relatedList.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (ctx, rIdx) {
+                final relTitle = relatedList[rIdx];
+                return ActionChip(
+                  backgroundColor: AppColors.card,
+                  avatar: const Icon(Icons.playlist_play, size: 16, color: AppColors.cyanAccent),
+                  label: Text(relTitle, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)),
+                  onPressed: () {
+                    _searchController.text = relTitle;
+                    _performSearch(relTitle);
+                  },
+                );
+              },
+            ),
+          );
+        }
+
+        // 3. Continuous list of matching songs
+        final songIndex = isPlaylistQuery ? (relatedList.isNotEmpty ? index - 2 : index - 1) : index;
+        final song = _searchResult[songIndex];
+
         return SongTile(
           song: song,
           isPlaying: playerState.currentSong?.id == song.id,
+          showMetadataDetails: true,
           onTap: () {
             _onSearchSubmitted(_searchController.text);
-            playerController.playSong(song, queue: _searchResult, index: index);
+            playerController.playSong(song, queue: _searchResult, index: songIndex);
           },
         );
       },
@@ -178,16 +368,19 @@ class _SearchViewState extends ConsumerState<SearchView> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Search Input with debounced search-as-you-type
+                  // Search Input with 300ms debounced search-as-you-type
                   TextField(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
-                    onSubmitted: _onSearchSubmitted,
+                    onSubmitted: (val) {
+                      _onSearchSubmitted(val);
+                      _performSearch(val);
+                    },
                     style: const TextStyle(color: Colors.black),
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: Colors.white,
-                      hintText: 'Search songs, albums, artists, or movies...',
+                      hintText: 'Search songs, moods, travel, sleep, artists...',
                       hintStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
                       prefixIcon: const Icon(Icons.search, color: Colors.black),
                       suffixIcon: _searchController.text.isNotEmpty
@@ -209,6 +402,35 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ],
               ),
             ),
+
+            // Autocomplete suggestions popup bar
+            if (_autocompleteSuggestions.isNotEmpty && _searchController.text.isNotEmpty)
+              Container(
+                color: AppColors.surface,
+                padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 6),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _autocompleteSuggestions.map((sug) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InkWell(
+                          onTap: () {
+                            _searchController.text = sug;
+                            _performSearch(sug);
+                            _onSearchSubmitted(sug);
+                          },
+                          child: Chip(
+                            backgroundColor: AppColors.card,
+                            label: Text(sug, style: const TextStyle(color: AppColors.cyanAccent, fontSize: 12)),
+                            avatar: const Icon(Icons.search, size: 14, color: AppColors.cyanAccent),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
 
             // Filter Chips (Legal Sources & Quality)
             if (_searchController.text.isNotEmpty)
@@ -273,29 +495,58 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ),
               ),
 
-            // Live Results Count Header (Requirement 2: Total count live updating)
+            // Live Results Count Header & "Did you mean..." banner
             if (_searchController.text.isNotEmpty)
               Container(
                 color: AppColors.background,
-                padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 8),
-                child: Row(
+                padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${_searchResult.length} ${_searchResult.length == 1 ? 'song found' : 'songs found'}',
-                      style: const TextStyle(
-                        color: AppColors.cyanAccent,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          _searchResult.isEmpty && !_isLoading
+                              ? '0 songs found'
+                              : (_searchResult.length < 20 && _currentIntent?.type == QueryIntentType.playlistType && !_isLoading)
+                                  ? 'Only ${_searchResult.length} free songs found for this mood'
+                                  : '${_searchResult.length} ${_searchResult.length == 1 ? 'song found' : 'songs found'}',
+                          style: TextStyle(
+                            color: (_searchResult.length < 20 && _currentIntent?.type == QueryIntentType.playlistType && !_isLoading)
+                                ? const Color(0xFFFFC107)
+                                : AppColors.cyanAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_isLoading)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyanAccent),
+                          ),
+                      ],
                     ),
-                    const Spacer(),
-                    if (_isLoading)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyanAccent),
+                    if (_spellingSuggestion != null && _searchResult.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      InkWell(
+                        onTap: () {
+                          _searchController.text = _spellingSuggestion!;
+                          _performSearch(_spellingSuggestion!);
+                        },
+                        child: Text(
+                          'Did you mean: "${_spellingSuggestion}"?',
+                          style: const TextStyle(
+                            color: Color(0xFF38D6FF),
+                            fontSize: 12.5,
+                            fontStyle: FontStyle.italic,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -374,23 +625,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
                               borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
                               onTap: () {
                                 final title = item['title'] as String;
-                                final allSongs = allSongsAsync.value ?? [];
-                                final filtered = allSongs.where((s) {
-                                  final g = s.genre.toLowerCase();
-                                  final t = title.toLowerCase();
-                                  return g.contains(t.split(' ').first) || t.contains(g);
-                                }).toList();
-
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => PlaylistDetailView(
-                                      title: title,
-                                      subtitle: 'Legal Music Collection',
-                                      songs: filtered.isNotEmpty ? filtered : allSongs.take(15).toList(),
-                                    ),
-                                  ),
-                                );
+                                _searchController.text = title;
+                                _performSearch(title);
                               },
                               child: Container(
                                 decoration: BoxDecoration(
@@ -435,7 +671,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
                         ),
                       ],
                     )
-                  : _buildSingleSongsList(playerController, playerState),
+                  : _buildSearchResults(playerController, playerState),
             ),
           ],
         ),

@@ -10,6 +10,7 @@ import '../shared_widgets/app_image.dart';
 import '../shared_widgets/song_tile.dart';
 import '../shared_widgets/add_to_playlist_sheet.dart';
 import '../../core/utils/app_snackbar.dart';
+import '../../core/services/artist_avatar_service.dart';
 
 class ArtistDetailView extends ConsumerStatefulWidget {
   final String artistName;
@@ -29,11 +30,25 @@ class _ArtistDetailViewState extends ConsumerState<ArtistDetailView> {
   List<SongModel> _songs = [];
   bool _isLoading = true;
   String? _error;
+  String? _resolvedAvatarUrl;
 
   @override
   void initState() {
     super.initState();
+    _resolvedAvatarUrl = widget.artistAvatarUrl;
     _fetchArtistSongs();
+    _resolveAvatarIfNeeded();
+  }
+
+  Future<void> _resolveAvatarIfNeeded() async {
+    if (_resolvedAvatarUrl == null || _resolvedAvatarUrl!.isEmpty || _resolvedAvatarUrl!.contains('unsplash')) {
+      final url = await ArtistAvatarService.getArtistAvatarUrl(widget.artistName);
+      if (mounted && url != null && url.isNotEmpty) {
+        setState(() {
+          _resolvedAvatarUrl = url;
+        });
+      }
+    }
   }
 
   Future<void> _fetchArtistSongs() async {
@@ -173,10 +188,25 @@ class _ArtistDetailViewState extends ConsumerState<ArtistDetailView> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (widget.artistAvatarUrl != null)
-                    AppImage(url: widget.artistAvatarUrl!, fit: BoxFit.cover, borderRadius: 0)
+                  if (_resolvedAvatarUrl != null && _resolvedAvatarUrl!.isNotEmpty)
+                    AppImage(url: _resolvedAvatarUrl!, fit: BoxFit.cover, borderRadius: 0)
                   else
-                    Container(color: AppColors.surface),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: ArtistAvatarService.getGradientForArtist(widget.artistName),
+                      ),
+                      child: Center(
+                        child: Text(
+                          ArtistAvatarService.getInitials(widget.artistName),
+                          style: const TextStyle(
+                            fontSize: 72,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white24,
+                            letterSpacing: 4,
+                          ),
+                        ),
+                      ),
+                    ),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
