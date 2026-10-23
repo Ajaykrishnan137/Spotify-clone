@@ -1,15 +1,36 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../models/song_model.dart';
 import 'online_music_search_service.dart';
 import 'fuzzy_matcher.dart';
 import 'query_intent_engine.dart';
+import 'local_search_index.dart';
+
+class SearchStreamBatch {
+  final List<SongModel> songs;
+  final bool isInitialLocalOrCached;
+  final bool isComplete;
+  final String sourceName;
+
+  const SearchStreamBatch({
+    required this.songs,
+    required this.isInitialLocalOrCached,
+    required this.isComplete,
+    required this.sourceName,
+  });
+}
 
 class LegalSearchEngineService {
   LegalSearchEngineService._();
 
+  static final http.Client _sharedClient = http.Client();
+
+  // In-memory LRU cache of recent queries and results (10 to 30 min duration)
   static final Map<String, List<SongModel>> _cache = {};
   static final Map<String, DateTime> _cacheTimestamp = {};
+  static const int _cacheDurationMinutes = 20;
 
   static String normalize(String input) {
     return FuzzyMatcher.normalize(input);
@@ -19,8 +40,193 @@ class LegalSearchEngineService {
     return FuzzyMatcher.computeCombinedFuzzyScore(queryNorm, targetNorm);
   }
 
-  /// Searches all legal sources in parallel, returning one continuous list of matching SongModels.
-  /// If strict artist intent is detected, only returns songs where the artist/composer field matches.
+  /// Instant lookup from in-memory cache if available and fresh (< 20 mins)
+  static List<SongModel>? getCachedResults(
+    String query, {
+    String? languageFilter,
+    String? sourceFilter,
+    String? qualityFilter,
+  }) {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return null;
+    final cacheKey = '$cleanQuery|$languageFilter|$sourceFilter|$qualityFilter';
+
+    if (_cache.containsKey(cacheKey) && _cacheTimestamp.containsKey(cacheKey)) {
+      final age = DateTime.now().difference(_cacheTimestamp[cacheKey]!);
+      if (age.inMinutes < _cacheDurationMinutes) {
+        return _cache[cacheKey];
+      }
+    }
+    return null;
+  }
+
+  /// Progressive search stream: yields local & cached data instantly, then yields batches as network sources resolve
+  static Stream<SearchStreamBatch> searchAllSourcesProgressive({
+    required String query,
+    required List<SongModel> localCatalog,
+    String? languageFilter,
+    String? sourceFilter,
+    String? qualityFilter,
+  }) async* {
+    final stopwatch = Stopwatch()..start();
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) {
+      yield const SearchStreamBatch(songs: [], isInitialLocalOrCached: true, isComplete: true, sourceName: 'empty');
+      return;
+    }
+
+    final cacheKey = '$cleanQuery|$languageFilter|$sourceFilter|$qualityFilter';
+
+    // 1. Instantly yield cached results if fresh
+    final cached = getCachedResults(query, languageFilter: languageFilter, sourceFilter: sourceFilter, qualityFilter: qualityFilter);
+    if (cached != null && cached.isNotEmpty) {
+      dev.log('[SearchTiming] Time to cached result for "$cleanQuery": ${stopwatch.elapsedMilliseconds} ms (${cached.length} songs)');
+      yield SearchStreamBatch(
+        songs: cached,
+        isInitialLocalOrCached: true,
+        isComplete: false,
+        sourceName: 'cache',
+      );
+    }
+
+    // 2. Pre-index local catalog if not already done, and perform instant local search
+    LocalSearchIndex.buildIndex(localCatalog);
+    final intent = QueryIntentEngine.analyzeQuery(cleanQuery);
+    final isArtistStrict = intent.type == QueryIntentType.artistStrictQuery;
+    final canonicalArtistNorm = isArtistStrict ? FuzzyMatcher.normalize(intent.matchedArtistName!) : '';
+
+    List<SongModel> localHits;
+    if (isArtistStrict) {
+      localHits = LocalSearchIndex.searchArtistStrictFast(canonicalArtistNorm);
+      if (localHits.isEmpty) {
+        localHits = await _searchLocalArtistStrict(localCatalog, canonicalArtistNorm);
+      }
+    } else {
+      localHits = LocalSearchIndex.searchFast(cleanQuery, limit: 30);
+      if (localHits.isEmpty) {
+        localHits = await _searchLocal(localCatalog, cleanQuery, intent);
+      }
+    }
+
+    if (localHits.isNotEmpty && (cached == null || cached.isEmpty)) {
+      dev.log('[SearchTiming] Time to first result (local) for "$cleanQuery": ${stopwatch.elapsedMilliseconds} ms (${localHits.length} songs)');
+      yield SearchStreamBatch(
+        songs: localHits,
+        isInitialLocalOrCached: true,
+        isComplete: false,
+        sourceName: 'local',
+      );
+    }
+
+    // 3. Launch external requests in parallel with strict 3.5s timeout per source
+    final List<SongModel> mergedList = [...localHits];
+    final Set<String> seenKeys = {
+      ...localHits.map((s) => '${FuzzyMatcher.normalize(s.title)}|||${FuzzyMatcher.normalize(s.artist)}')
+    };
+
+    if (isArtistStrict) {
+      final canonicalArtist = intent.matchedArtistName!;
+
+      final futures = [
+        OnlineMusicSearchService.searchOnline(canonicalArtist, limit: 30),
+        _searchInternetArchive(canonicalArtist, intent),
+      ];
+
+      final results = await Future.wait(futures);
+      final onlineSongs = results[0];
+      final archiveSongs = results[1];
+
+      final newItems = <SongModel>[];
+      for (final s in [...onlineSongs, ...archiveSongs]) {
+        if (_matchesArtistStrict(s.artist, canonicalArtistNorm)) {
+          final key = '${FuzzyMatcher.normalize(s.title)}|||${FuzzyMatcher.normalize(s.artist)}';
+          if (!seenKeys.contains(key)) {
+            seenKeys.add(key);
+            newItems.add(s);
+          }
+        }
+      }
+
+      mergedList.addAll(newItems);
+      // Run sorting on background isolate to keep UI butter smooth
+      final sorted = await compute(_sortArtistStrictIsolate, mergedList);
+
+      _cache[cacheKey] = sorted;
+      _cacheTimestamp[cacheKey] = DateTime.now();
+      LocalSearchIndex.addSongsToIndex(sorted);
+
+      dev.log('[SearchTiming] Time to full results for "$cleanQuery": ${stopwatch.elapsedMilliseconds} ms (${sorted.length} total)');
+      yield SearchStreamBatch(
+        songs: sorted,
+        isInitialLocalOrCached: false,
+        isComplete: true,
+        sourceName: 'all_sources',
+      );
+    } else {
+      String effectiveSearchTerm = cleanQuery;
+      if (intent.type == QueryIntentType.playlistType && intent.tags.isNotEmpty) {
+        if (cleanQuery.toLowerCase().contains('tamil')) {
+          effectiveSearchTerm = 'tamil ${intent.tags.take(3).join(' ')}';
+        } else {
+          effectiveSearchTerm = intent.tags.take(3).join(' ');
+        }
+      }
+
+      final futures = [
+        OnlineMusicSearchService.searchOnline(cleanQuery, limit: 25),
+        _searchJamendo(cleanQuery, intent),
+        _searchInternetArchive(cleanQuery, intent),
+        if (effectiveSearchTerm != cleanQuery)
+          OnlineMusicSearchService.searchOnline(effectiveSearchTerm, limit: 20)
+        else
+          Future.value(<SongModel>[]),
+      ];
+
+      final results = await Future.wait(futures);
+      final newItems = <SongModel>[];
+      for (final r in results) {
+        for (final song in r) {
+          final key = '${FuzzyMatcher.normalize(song.title)}|||${FuzzyMatcher.normalize(song.artist)}';
+          if (!seenKeys.contains(key)) {
+            seenKeys.add(key);
+            newItems.add(song);
+          }
+        }
+      }
+
+      mergedList.addAll(newItems);
+
+      // Perform ranking and scoring off UI thread in isolate
+      final sorted = await compute(
+        _rankAndFilterIsolate,
+        _IsolateSortParams(
+          songs: mergedList.take(200).toList(),
+          rawQuery: cleanQuery,
+          queryNorm: FuzzyMatcher.normalize(cleanQuery),
+          intentTypeIndex: intent.type.index,
+          intentTags: intent.tags,
+          intentGenres: intent.genres,
+          sortMode: intent.sortMode,
+          sourceFilter: sourceFilter,
+          qualityFilter: qualityFilter,
+        ),
+      );
+
+      _cache[cacheKey] = sorted;
+      _cacheTimestamp[cacheKey] = DateTime.now();
+      LocalSearchIndex.addSongsToIndex(sorted);
+
+      dev.log('[SearchTiming] Time to full results for "$cleanQuery": ${stopwatch.elapsedMilliseconds} ms (${sorted.length} total)');
+      yield SearchStreamBatch(
+        songs: sorted,
+        isInitialLocalOrCached: false,
+        isComplete: true,
+        sourceName: 'all_sources',
+      );
+    }
+  }
+
+  /// Fallback direct search implementation preserving synchronous backward compatibility
   static Future<List<SongModel>> searchAllSources({
     required String query,
     required List<SongModel> localCatalog,
@@ -28,168 +234,30 @@ class LegalSearchEngineService {
     String? sourceFilter,
     String? qualityFilter,
   }) async {
-    final cleanQuery = query.trim();
-    if (cleanQuery.isEmpty) return const [];
-
-    final cacheKey = '$cleanQuery|$languageFilter|$sourceFilter|$qualityFilter';
-    if (_cache.containsKey(cacheKey) && _cacheTimestamp.containsKey(cacheKey)) {
-      final age = DateTime.now().difference(_cacheTimestamp[cacheKey]!);
-      if (age.inHours < 24) {
-        return _cache[cacheKey]!;
-      }
+    List<SongModel> last = const [];
+    await for (final batch in searchAllSourcesProgressive(
+      query: query,
+      localCatalog: localCatalog,
+      languageFilter: languageFilter,
+      sourceFilter: sourceFilter,
+      qualityFilter: qualityFilter,
+    )) {
+      last = batch.songs;
+      if (batch.isComplete) break;
     }
-
-    // 1. Analyze query intent
-    final intent = QueryIntentEngine.analyzeQuery(cleanQuery);
-    final queryNorm = FuzzyMatcher.normalize(cleanQuery);
-
-    // -------------------------------------------------------------
-    // STRICT ARTIST MODE
-    // -------------------------------------------------------------
-    if (intent.type == QueryIntentType.artistStrictQuery) {
-      final canonicalArtist = intent.matchedArtistName!;
-      final canonicalNorm = FuzzyMatcher.normalize(canonicalArtist);
-
-      // Search local and online sources specifically for the canonical artist name
-      final results = await Future.wait([
-        _searchLocalArtistStrict(localCatalog, canonicalNorm),
-        OnlineMusicSearchService.searchOnline(canonicalArtist, limit: 40),
-        _searchInternetArchive(canonicalArtist, intent),
-      ]);
-
-      final List<SongModel> localSongs = results[0];
-      final List<SongModel> onlineSongs = results[1];
-      final List<SongModel> archiveSongs = results[2];
-
-      final rawMerged = [...localSongs, ...onlineSongs, ...archiveSongs];
-
-      // Strict filter: song.artist MUST match canonical artist (exact or fuzzy score >= 0.85)
-      final List<SongModel> artistOnlySongs = rawMerged.where((s) {
-        return _matchesArtistStrict(s.artist, canonicalNorm);
-      }).toList();
-
-      // Deduplicate by normalized Title + Artist
-      final Map<String, SongModel> dedup = {};
-      for (final song in artistOnlySongs) {
-        final key = '${FuzzyMatcher.normalize(song.title)}|||${FuzzyMatcher.normalize(song.artist)}';
-        if (!dedup.containsKey(key)) {
-          dedup[key] = song;
-        }
-      }
-
-      var merged = dedup.values.toList();
-
-      // Sort by popularity first, with release recency secondary
-      merged.sort((a, b) {
-        return b.popularity.compareTo(a.popularity);
-      });
-
-      // Filter by source / quality if user selected
-      if (sourceFilter != null && sourceFilter.isNotEmpty && sourceFilter != 'All') {
-        merged = merged.where((s) => (s.source ?? '').toLowerCase().contains(sourceFilter.toLowerCase())).toList();
-      }
-      if (qualityFilter != null && qualityFilter.isNotEmpty && qualityFilter != 'All') {
-        if (qualityFilter == 'Lossless') {
-          merged = merged.where((s) => s.storagePath.endsWith('.flac')).toList();
-        } else if (qualityFilter == 'High (320kbps)') {
-          merged = merged.where((s) => !s.storagePath.endsWith('_96.mp4')).toList();
-        }
-      }
-
-      _cache[cacheKey] = merged;
-      _cacheTimestamp[cacheKey] = DateTime.now();
-      return merged;
-    }
-
-    // -------------------------------------------------------------
-    // GENERAL / PLAYLIST / MOOD MODE
-    // -------------------------------------------------------------
-    String effectiveSearchTerm = cleanQuery;
-    if (intent.type == QueryIntentType.playlistType && intent.tags.isNotEmpty) {
-      if (cleanQuery.toLowerCase().contains('tamil')) {
-        effectiveSearchTerm = 'tamil ${intent.tags.take(3).join(' ')}';
-      } else {
-        effectiveSearchTerm = intent.tags.take(3).join(' ');
-      }
-    }
-
-    final results = await Future.wait([
-      _searchLocal(localCatalog, cleanQuery, intent),
-      _searchJamendo(cleanQuery, intent),
-      _searchInternetArchive(cleanQuery, intent),
-      OnlineMusicSearchService.searchOnline(cleanQuery, limit: 25),
-      if (effectiveSearchTerm != cleanQuery)
-        OnlineMusicSearchService.searchOnline(effectiveSearchTerm, limit: 20)
-      else
-        Future.value(<SongModel>[]),
-    ]);
-
-    final List<SongModel> localSongs = results[0];
-    final List<SongModel> jamendoSongs = results[1];
-    final List<SongModel> archiveSongs = results[2];
-    final List<SongModel> licensedOnline = results[3];
-    final List<SongModel> moodOnline = results[4];
-
-    final List<SongModel> rawMerged = [
-      ...localSongs,
-      ...licensedOnline,
-      ...moodOnline,
-      ...jamendoSongs,
-      ...archiveSongs,
-    ];
-
-    final Map<String, SongModel> dedup = {};
-    for (final song in rawMerged) {
-      final key = '${FuzzyMatcher.normalize(song.title)}|||${FuzzyMatcher.normalize(song.artist)}';
-      if (!dedup.containsKey(key)) {
-        dedup[key] = song;
-      }
-    }
-
-    var merged = dedup.values.toList();
-
-    merged.sort((a, b) {
-      final scoreA = _calculateRankingScore(a, cleanQuery, queryNorm, intent);
-      final scoreB = _calculateRankingScore(b, cleanQuery, queryNorm, intent);
-      return scoreB.compareTo(scoreA);
-    });
-
-    if (sourceFilter != null && sourceFilter.isNotEmpty && sourceFilter != 'All') {
-      merged = merged.where((s) {
-        final g = s.genre.toLowerCase();
-        final src = (s.source ?? '').toLowerCase();
-        final filter = sourceFilter.toLowerCase();
-        return g.contains(filter) || src.contains(filter);
-      }).toList();
-    }
-    if (qualityFilter != null && qualityFilter.isNotEmpty && qualityFilter != 'All') {
-      if (qualityFilter == 'Lossless') {
-        merged = merged.where((s) => s.storagePath.endsWith('.flac')).toList();
-      } else if (qualityFilter == 'High (320kbps)') {
-        merged = merged.where((s) => !s.storagePath.endsWith('_96.mp4')).toList();
-      }
-    }
-
-    _cache[cacheKey] = merged;
-    _cacheTimestamp[cacheKey] = DateTime.now();
-    return merged;
+    return last;
   }
 
-  /// Strict artist matching check: matches individual artist segments (split by /, ,, &, feat, with, and)
-  /// Requires exact match, alias match, or high-threshold fuzzy match (>= 0.85).
-  /// Never matches title, album, tags, or loosely similar artists.
   static bool _matchesArtistStrict(String songArtist, String canonicalArtistNorm) {
     final norm = FuzzyMatcher.normalize(songArtist);
     if (norm == canonicalArtistNorm) return true;
 
-    // Split multi-artist and collaboration strings
     final parts = songArtist.split(RegExp(r'[/,&+]|\bfeat\b|\bwith\b|\band\b', caseSensitive: false));
     for (final part in parts) {
       final pNorm = FuzzyMatcher.normalize(part);
       if (pNorm.isEmpty) continue;
       if (pNorm == canonicalArtistNorm) return true;
 
-      // Check alias dictionary
       final aliasMatch = QueryIntentEngine.matchArtistQuery(pNorm);
       if (aliasMatch != null && FuzzyMatcher.normalize(aliasMatch) == canonicalArtistNorm) {
         return true;
@@ -205,70 +273,6 @@ class LegalSearchEngineService {
     return catalog.where((s) {
       return _matchesArtistStrict(s.artist, canonicalNorm);
     }).map((s) => s.copyWith(source: 'Local Storage')).toList();
-  }
-
-  static double _calculateRankingScore(SongModel song, String rawQuery, String queryNorm, QueryIntentResult intent) {
-    final titleNorm = FuzzyMatcher.normalize(song.title);
-    final artistNorm = FuzzyMatcher.normalize(song.artist);
-    final albumNorm = FuzzyMatcher.normalize(song.album);
-    final genreNorm = FuzzyMatcher.normalize(song.genre);
-    final combinedNorm = '$titleNorm $artistNorm $albumNorm $genreNorm';
-
-    double relevanceScore = 0.0;
-
-    if (titleNorm == queryNorm || combinedNorm.contains(queryNorm)) {
-      relevanceScore += 1.0;
-    } else if (titleNorm.startsWith(queryNorm)) {
-      relevanceScore += 0.85;
-    } else {
-      relevanceScore += FuzzyMatcher.computeCombinedFuzzyScore(rawQuery, combinedNorm);
-    }
-
-    if (intent.type == QueryIntentType.playlistType) {
-      for (final tag in intent.tags) {
-        final tagNorm = FuzzyMatcher.normalize(tag);
-        if (combinedNorm.contains(tagNorm)) {
-          relevanceScore += 0.35;
-        }
-      }
-      for (final g in intent.genres) {
-        final gNorm = FuzzyMatcher.normalize(g);
-        if (genreNorm.contains(gNorm) || combinedNorm.contains(gNorm)) {
-          relevanceScore += 0.35;
-        }
-      }
-    }
-
-    double popularityBonus = 0.0;
-    if (song.popularity > 0) {
-      popularityBonus = (song.popularity / 500000.0).clamp(0.0, 0.4);
-    }
-
-    double recencyBonus = 0.0;
-    if (song.releaseDate != null && song.releaseDate!.isNotEmpty) {
-      final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(song.releaseDate!);
-      if (yearMatch != null) {
-        final year = int.tryParse(yearMatch.group(1)!) ?? 0;
-        final currentYear = DateTime.now().year;
-        if (year >= currentYear - 1) {
-          recencyBonus = 0.5;
-        } else if (year >= currentYear - 3) {
-          recencyBonus = 0.3;
-        } else if (year >= currentYear - 5) {
-          recencyBonus = 0.15;
-        }
-      }
-    }
-
-    if (intent.sortMode == 'latest') {
-      return (recencyBonus * 2.0) + (relevanceScore * 0.5) + (popularityBonus * 0.3);
-    } else if (intent.sortMode == 'trending') {
-      return (popularityBonus * 2.0) + (relevanceScore * 0.5) + (recencyBonus * 0.3);
-    } else if (intent.sortMode == 'mixed') {
-      return (recencyBonus * 1.5) + (popularityBonus * 1.5) + (relevanceScore * 0.6);
-    }
-
-    return relevanceScore + (popularityBonus * 0.2) + (recencyBonus * 0.2);
   }
 
   static Future<List<SongModel>> _searchLocal(List<SongModel> catalog, String rawQuery, QueryIntentResult intent) async {
@@ -315,7 +319,11 @@ class LegalSearchEngineService {
       final url = Uri.parse(
         'https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=json&limit=15&$searchParam&$orderParam&include=musicinfo&audioformat=mp32',
       );
-      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      final res = await _sharedClient.get(url, headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+      }).timeout(const Duration(milliseconds: 3500));
       if (res.statusCode != 200) return [];
       final data = json.decode(res.body);
       final results = data['results'] as List?;
@@ -363,7 +371,11 @@ class LegalSearchEngineService {
       final url = Uri.parse(
         'https://archive.org/advancedsearch.php?q=$queryEncoded&fl[]=identifier,title,creator,collection,year,downloads&rows=15&page=1$sort&output=json',
       );
-      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      final res = await _sharedClient.get(url, headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+      }).timeout(const Duration(milliseconds: 3500));
       if (res.statusCode != 200) return [];
       final data = json.decode(res.body);
       final docs = data['response']?['docs'] as List?;
@@ -399,4 +411,123 @@ class LegalSearchEngineService {
       return [];
     }
   }
+}
+
+// -------------------------------------------------------------
+// BACKGROUND ISOLATE HELPERS FOR HEAVY SCORING & SORTING
+// -------------------------------------------------------------
+List<SongModel> _sortArtistStrictIsolate(List<SongModel> songs) {
+  final copy = List<SongModel>.from(songs);
+  copy.sort((a, b) => b.popularity.compareTo(a.popularity));
+  return copy;
+}
+
+class _IsolateSortParams {
+  final List<SongModel> songs;
+  final String rawQuery;
+  final String queryNorm;
+  final int intentTypeIndex;
+  final List<String> intentTags;
+  final List<String> intentGenres;
+  final String? sortMode;
+  final String? sourceFilter;
+  final String? qualityFilter;
+
+  const _IsolateSortParams({
+    required this.songs,
+    required this.rawQuery,
+    required this.queryNorm,
+    required this.intentTypeIndex,
+    required this.intentTags,
+    required this.intentGenres,
+    this.sortMode,
+    this.sourceFilter,
+    this.qualityFilter,
+  });
+}
+
+List<SongModel> _rankAndFilterIsolate(_IsolateSortParams params) {
+  var list = List<SongModel>.from(params.songs);
+
+  if (params.sourceFilter != null && params.sourceFilter!.isNotEmpty && params.sourceFilter != 'All') {
+    final filter = params.sourceFilter!.toLowerCase();
+    list = list.where((s) {
+      final g = s.genre.toLowerCase();
+      final src = (s.source ?? '').toLowerCase();
+      return g.contains(filter) || src.contains(filter);
+    }).toList();
+  }
+
+  if (params.qualityFilter != null && params.qualityFilter!.isNotEmpty && params.qualityFilter != 'All') {
+    if (params.qualityFilter == 'Lossless') {
+      list = list.where((s) => s.storagePath.endsWith('.flac')).toList();
+    } else if (params.qualityFilter == 'High (320kbps)') {
+      list = list.where((s) => !s.storagePath.endsWith('_96.mp4')).toList();
+    }
+  }
+
+  list.sort((a, b) {
+    final scoreA = _calculateScore(a, params);
+    final scoreB = _calculateScore(b, params);
+    return scoreB.compareTo(scoreA);
+  });
+
+  return list;
+}
+
+double _calculateScore(SongModel song, _IsolateSortParams params) {
+  final titleNorm = FuzzyMatcher.normalize(song.title);
+  final artistNorm = FuzzyMatcher.normalize(song.artist);
+  final albumNorm = FuzzyMatcher.normalize(song.album);
+  final genreNorm = FuzzyMatcher.normalize(song.genre);
+  final combinedNorm = '$titleNorm $artistNorm $albumNorm $genreNorm';
+
+  double relevanceScore = 0.0;
+  if (titleNorm == params.queryNorm || combinedNorm.contains(params.queryNorm)) {
+    relevanceScore += 1.0;
+  } else if (titleNorm.startsWith(params.queryNorm)) {
+    relevanceScore += 0.85;
+  } else {
+    relevanceScore += FuzzyMatcher.computeCombinedFuzzyScore(params.rawQuery, combinedNorm);
+  }
+
+  if (params.intentTypeIndex == QueryIntentType.playlistType.index) {
+    for (final tag in params.intentTags) {
+      if (combinedNorm.contains(FuzzyMatcher.normalize(tag))) relevanceScore += 0.35;
+    }
+    for (final g in params.intentGenres) {
+      if (genreNorm.contains(FuzzyMatcher.normalize(g)) || combinedNorm.contains(FuzzyMatcher.normalize(g))) {
+        relevanceScore += 0.35;
+      }
+    }
+  }
+
+  double popularityBonus = 0.0;
+  if (song.popularity > 0) {
+    popularityBonus = (song.popularity / 500000.0).clamp(0.0, 0.4);
+  }
+
+  double recencyBonus = 0.0;
+  if (song.releaseDate != null && song.releaseDate!.isNotEmpty) {
+    final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(song.releaseDate!);
+    if (yearMatch != null) {
+      final year = int.tryParse(yearMatch.group(1)!) ?? 0;
+      final currentYear = 2026;
+      if (year >= currentYear - 1) {
+        recencyBonus = 0.5;
+      } else if (year >= currentYear - 3) {
+        recencyBonus = 0.3;
+      } else if (year >= currentYear - 5) {
+        recencyBonus = 0.15;
+      }
+    }
+  }
+
+  if (params.sortMode == 'latest') {
+    return (recencyBonus * 2.0) + (relevanceScore * 0.5) + (popularityBonus * 0.3);
+  } else if (params.sortMode == 'trending') {
+    return (popularityBonus * 2.0) + (relevanceScore * 0.5) + (recencyBonus * 0.3);
+  }
+
+  return relevanceScore + (popularityBonus * 0.2) + (recencyBonus * 0.2);
 }

@@ -36,8 +36,10 @@ class OnlineMusicSearchService {
         .replaceAll('&gt;', '>');
   }
 
+  static final http.Client _client = http.Client();
+
   /// Search online catalog by song name, movie name, or artist name
-  static Future<List<SongModel>> searchOnline(String query, {int limit = 15}) async {
+  static Future<List<SongModel>> searchOnline(String query, {int limit = 25}) async {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) return [];
 
@@ -49,14 +51,16 @@ class OnlineMusicSearchService {
     );
 
     try {
-      final response = await http.get(
+      final response = await _client.get(
         url,
         headers: {
           'User-Agent':
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
         },
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(milliseconds: 3500));
 
       if (response.statusCode != 200) return [];
 

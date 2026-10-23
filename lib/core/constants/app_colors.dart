@@ -1,56 +1,56 @@
 import 'package:flutter/material.dart';
 
-/// SkyTune Official Design System Tokens (Flat & Calm Palette)
+/// SkyTune Official Design System Tokens (Vibrant, Clean, Flat & High-Contrast)
 class AppColors {
   AppColors._();
 
-  // Core Brand & Palette (Calm & Elegant)
-  static const Color background     = Color(0xFF0F1320);   // Dark Slate Background
+  // Core Brand & Palette (Vivid, High-Contrast & Solid Flat Fills)
+  static const Color background     = Color(0xFF0A0E1A);   // Deep, slightly darker so content pops
   static const Color deepNightBlue  = background;          // Compatibility alias
-  static const Color surface        = Color(0xFF181D2E);   // Surface Cards / Containers
-  static const Color elevated       = Color(0xFF222840);   // Elevated Surface / Borders
-  static const Color primarySkyBlue = Color(0xFF4A90D9);   // Primary Accent (Muted Sky Blue)
-  static const Color sunsetCoral    = Color(0xFFE36A6A);   // Secondary Accent (Soft Coral, likes only)
-  static const Color secondaryAccent = sunsetCoral;        // Explicit alias for likes/accent
-  static const Color softGold       = Color(0xFFE5B558);   // Soft Gold
-  static const Color dividers       = Color(0xFF2A3047);   // 1px Dividers
+  static const Color surface        = Color(0xFF151B2E);   // Surface cards / containers
+  static const Color elevated       = Color(0xFF1E2640);   // Elevated surface / borders
+  static const Color primarySkyBlue = Color(0xFF1E90FF);   // Primary Accent (Clear sky blue, saturated)
+  static const Color secondaryAccent = Color(0xFFFF5A5F);  // Secondary Accent (Likes, delete, alerts)
+  static const Color sunsetCoral    = secondaryAccent;     // Compatibility alias
+  static const Color softGold       = Color(0xFFFFB020);   // Warning / Gold Accent
+  static const Color dividers       = Color(0xFF2C3552);   // Clean 1px Dividers
 
   // Standard aliases for components
   static const Color card           = surface;
   static const Color accent         = primarySkyBlue;
-  static const Color cyanAccent     = primarySkyBlue;      // Clean alias pointing to calm primary
-  static const Color accentLight    = Color(0xFF6BA8E8);
+  static const Color cyanAccent     = primarySkyBlue;      // Clean alias pointing to vivid primary
+  static const Color accentLight    = Color(0xFF4DA6FF);
 
-  // Text Hierarchy
-  static const Color textPrimary   = Color(0xFFF2F4F8);
-  static const Color textSecondary = Color(0xFF9AA3B8);
-  static const Color textMuted     = Color(0xFF6B7898);
+  // Text Hierarchy (High-Contrast & WCAG 4.5:1 Compliant)
+  static const Color textPrimary   = Color(0xFFFFFFFF);   // Pure white for crisp contrast
+  static const Color textSecondary = Color(0xFFB4BDD6);   // Bright, legible secondary (not dull/dim)
+  static const Color textMuted     = Color(0xFF8896B8);   // Muted notes
 
   // Functional Colors
-  static const Color error         = sunsetCoral;
-  static const Color warning       = softGold;
-  static const Color success       = Color(0xFF48BB78);
-  static const Color offline       = Color(0xFF2A3047);
+  static const Color error         = secondaryAccent;     // #FF5A5F
+  static const Color warning       = softGold;            // #FFB020
+  static const Color success       = Color(0xFF2ECC71);   // Clear vibrant success green
+  static const Color offline       = Color(0xFF2C3552);
   static const Color shimmerBase   = surface;
   static const Color shimmerHighlight = elevated;
 
-  // Subtle default album/playlist placeholder gradient (two close shades, never neon)
+  // Subtle default album/playlist placeholder gradient (two close shades of same hue, never neon)
   static const LinearGradient subtlePlaceholderGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF1F263B),
-      Color(0xFF161B2C),
+      Color(0xFF1E90FF),
+      Color(0xFF1877D2),
     ],
   );
 
-  // Logo gradient alias (subtle sky blue tone)
+  // Logo gradient alias (clear vivid sky blue tones)
   static const LinearGradient logoGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF4A90D9),
-      Color(0xFF3570B2),
+      Color(0xFF1E90FF),
+      Color(0xFF1877D2),
     ],
   );
 
@@ -58,8 +58,8 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF4A90D9),
-      Color(0xFF3570B2),
+      Color(0xFF1E90FF),
+      Color(0xFF1877D2),
     ],
   );
 
@@ -67,8 +67,8 @@ class AppColors {
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
-      Color(0xFF181D2E),
-      Color(0xFF131726),
+      Color(0xFF151B2E),
+      Color(0xFF101524),
     ],
   );
 }

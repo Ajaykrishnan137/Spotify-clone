@@ -27,11 +27,7 @@ class AppImage extends StatelessWidget {
           width: width,
           height: height,
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1E90FF), Color(0xFF5B4BFF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: AppColors.subtlePlaceholderGradient,
           ),
           child: Center(
             child: Icon(

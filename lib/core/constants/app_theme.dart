@@ -38,27 +38,28 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.cyanAccent,
+        selectedItemColor: AppColors.primarySkyBlue,
         unselectedItemColor: AppColors.textSecondary,
-        selectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        selectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
         unselectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
         type: BottomNavigationBarType.fixed,
-        elevation: 8,
+        elevation: 0,
       ),
       cardTheme: CardTheme(
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-          side: const BorderSide(color: AppColors.elevated, width: 1.0),
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.dividers, width: 1.0),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primarySkyBlue,
           foregroundColor: Colors.white,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
+            borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(horizontal: Dimensions.space20, vertical: Dimensions.space12),
           textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),

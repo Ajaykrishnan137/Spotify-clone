@@ -12,6 +12,7 @@ import '../../core/services/cloud_catalog_service.dart';
 import '../../core/services/legal_search_engine_service.dart';
 import '../../core/services/query_intent_engine.dart';
 import '../../core/services/fuzzy_matcher.dart';
+import '../../core/services/local_search_index.dart';
 import '../playlist/playlist_detail_view.dart';
 import 'generated_playlist_card.dart';
 import 'artist_header_card.dart';
@@ -55,9 +56,22 @@ class _SearchViewState extends ConsumerState<SearchView> {
     {'title': 'Dance / Party', 'color': Color(0xFF383120), 'icon': Icons.celebration},
   ];
 
+  StreamSubscription<List<SongModel>>? _searchSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // Warm up local search index and cloud catalog in background
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final catalog = await ref.read(cloudCatalogServiceProvider).getCatalog();
+      LocalSearchIndex.instance.buildIndex(catalog);
+    });
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -67,7 +81,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
     _updateAutocomplete(query);
 
-    _debounce = Timer(const Duration(milliseconds: 300), () {
+    // 250ms debounce as specified in requirements
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       _performSearch(query);
     });
   }
@@ -112,6 +127,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
     final cleanQuery = query.trim();
     final requestId = ++_searchRequestId;
 
+    // Cancel any ongoing active search stream
+    await _searchSubscription?.cancel();
+    _searchSubscription = null;
+
     if (cleanQuery.isEmpty) {
       setState(() {
         _searchResult = [];
@@ -134,25 +153,34 @@ class _SearchViewState extends ConsumerState<SearchView> {
     final candidatePool = catalog.map((s) => s.title).followedBy(catalog.map((s) => s.artist));
     final suggestion = FuzzyMatcher.findSpellingSuggestion(cleanQuery, candidatePool);
 
-    final result = await LegalSearchEngineService.searchAllSources(
+    // Listen to progressive updates from searchAllSourcesProgressive
+    _searchSubscription = LegalSearchEngineService.searchAllSourcesProgressive(
       query: cleanQuery,
       localCatalog: catalog,
       sourceFilter: _selectedSourceFilter != 'All' ? _selectedSourceFilter : null,
       qualityFilter: _selectedQualityFilter != 'All' ? _selectedQualityFilter : null,
-    );
+    ).listen((progressiveBatch) {
+      if (!mounted || requestId != _searchRequestId) return;
 
-    if (!mounted || requestId != _searchRequestId) return;
+      List<SongModel> finalResults = List<SongModel>.from(progressiveBatch);
+      if (intent.type == QueryIntentType.artistStrictQuery) {
+        _applyArtistSort(finalResults);
+      }
 
-    // Apply artist sort order if in strict artist mode
-    List<SongModel> finalResults = List<SongModel>.from(result);
-    if (intent.type == QueryIntentType.artistStrictQuery) {
-      _applyArtistSort(finalResults);
-    }
-
-    setState(() {
-      _searchResult = finalResults;
-      _isLoading = false;
-      _spellingSuggestion = suggestion;
+      setState(() {
+        _searchResult = finalResults;
+        _spellingSuggestion = suggestion;
+      });
+    }, onDone: () {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }, onError: (err) {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _isLoading = false;
+      });
     });
   }
 
@@ -444,6 +472,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
         final song = _searchResult[songIndex];
 
         return SongTile(
+          key: ValueKey(song.id),
           song: song,
           isPlaying: playerState.currentSong?.id == song.id,
           showMetadataDetails: true,
