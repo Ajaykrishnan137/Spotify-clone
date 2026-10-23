@@ -56,7 +56,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
     {'title': 'Dance / Party', 'color': Color(0xFF383120), 'icon': Icons.celebration},
   ];
 
-  StreamSubscription<List<SongModel>>? _searchSubscription;
+  StreamSubscription<SearchStreamBatch>? _searchSubscription;
 
   @override
   void initState() {
@@ -64,7 +64,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
     // Warm up local search index and cloud catalog in background
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final catalog = await ref.read(cloudCatalogServiceProvider).getCatalog();
-      LocalSearchIndex.instance.buildIndex(catalog);
+      LocalSearchIndex.buildIndex(catalog);
     });
   }
 
@@ -162,7 +162,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
     ).listen((progressiveBatch) {
       if (!mounted || requestId != _searchRequestId) return;
 
-      List<SongModel> finalResults = List<SongModel>.from(progressiveBatch);
+      List<SongModel> finalResults = List<SongModel>.from(progressiveBatch.songs);
       if (intent.type == QueryIntentType.artistStrictQuery) {
         _applyArtistSort(finalResults);
       }
