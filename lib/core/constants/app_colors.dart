@@ -11,6 +11,7 @@ class AppColors {
   static const Color elevated       = Color(0xFF222840);   // Elevated Surface / Borders
   static const Color primarySkyBlue = Color(0xFF4A90D9);   // Primary Accent (Muted Sky Blue)
   static const Color sunsetCoral    = Color(0xFFE36A6A);   // Secondary Accent (Soft Coral, likes only)
+  static const Color secondaryAccent = sunsetCoral;        // Explicit alias for likes/accent
   static const Color softGold       = Color(0xFFE5B558);   // Soft Gold
   static const Color dividers       = Color(0xFF2A3047);   // 1px Dividers
 
