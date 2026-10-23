@@ -328,7 +328,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           const ListTile(
             title: Text('SkyTune Music Player', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
             subtitle: Text('Version 1.0.0+1 (Production Release)', style: TextStyle(color: AppColors.textSecondary)),
-            trailing: Icon(Icons.info_outline, color: AppColors.cyanAccent),
+            trailing: Icon(Icons.info_outline, color: AppColors.accent),
           ),
           const ListTile(
             title: Text('100% Legal Music Sources', style: TextStyle(color: AppColors.textPrimary)),
@@ -338,9 +338,16 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
             ),
           ),
           const ListTile(
+            title: Text('Trending Calculations & Chart Transparency', style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: Text(
+              'Trending Tamil and rankings are computed transparently from the popularity, download, and playback metrics of free, legal, and openly licensed repositories, combined with local device momentum. They may differ from commercial radio/streaming charts, and new commercial film songs are not available from these legal sources.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ),
+          const ListTile(
             title: Text('Image & Artist Media Attribution', style: TextStyle(color: AppColors.textPrimary)),
             subtitle: Text(
-              'Artist profile photos and cover visuals are sourced under open licenses from Jamendo Music (Creative Commons) and Wikimedia Commons (CC-BY-SA 3.0/4.0 & Public Domain). All credits belong to their respective creators and license holders. Fallbacks use procedurally generated SkyTune gradients.',
+              'Artist profile photos and cover visuals are sourced under open licenses from Jamendo Music (Creative Commons) and Wikimedia Commons / Wikipedia APIs (CC-BY-SA 3.0/4.0 & Public Domain). All credits belong to their respective creators, photographers, and license holders. Fallbacks use solid-color monogram avatars.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
             ),
           ),

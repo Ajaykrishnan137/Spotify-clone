@@ -82,7 +82,24 @@ class OnlineMusicSearchService {
 
         final rawTitle = (item['title'] ?? item['song'] ?? 'Unknown Song').toString();
         final rawAlbum = (moreInfo['album'] ?? item['album'] ?? 'Single').toString();
-        final rawArtist = (moreInfo['primary_artists'] ?? item['subtitle'] ?? 'Various Artists').toString();
+
+        // Extract primary artists and music composer
+        final musicComposer = (moreInfo['music'] ?? '').toString().trim();
+        final primaryArtists = (moreInfo['primary_artists'] ?? '').toString().trim();
+        final subtitle = (item['subtitle'] ?? '').toString().trim();
+
+        String rawArtist = primaryArtists;
+        if (rawArtist.isEmpty || rawArtist == 'Various Artists') {
+          if (musicComposer.isNotEmpty) {
+            rawArtist = musicComposer;
+          } else if (subtitle.isNotEmpty) {
+            rawArtist = subtitle;
+          } else {
+            rawArtist = 'Various Artists';
+          }
+        } else if (musicComposer.isNotEmpty && !rawArtist.toLowerCase().contains(musicComposer.toLowerCase())) {
+          rawArtist = '$rawArtist / $musicComposer';
+        }
 
         final title = _cleanText(rawTitle);
         final album = _cleanText(rawAlbum);

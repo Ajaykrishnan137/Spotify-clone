@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../models/song_model.dart';
 import 'online_music_search_service.dart';
+import 'cloud_catalog_service.dart';
+import 'fuzzy_matcher.dart';
 
 class ArtistInfo {
   final String name;
@@ -20,46 +23,37 @@ class ArtistInfo {
       );
 }
 
+class TrendingPoolState {
+  final List<SongModel> fullRankedPool;
+  final List<SongModel> currentBatch;
+  final DateTime lastUpdated;
+  final int batchIndex;
+
+  const TrendingPoolState({
+    required this.fullRankedPool,
+    required this.currentBatch,
+    required this.lastUpdated,
+    this.batchIndex = 0,
+  });
+}
+
 class HomeContentService {
   HomeContentService._();
 
-  static const String _tamilCacheFile = 'home_trending_tamil.json';
-  static List<SongModel>? _memoryTamilCache;
+  static const String _trendingPoolFile = 'home_trending_tamil_pool_v2.json';
+  static TrendingPoolState? _cachedPoolState;
+  static final Set<String> _recentlyServedSongIds = {};
 
   /// Curated popular artists from legal and global catalogs
   static const List<ArtistInfo> popularArtists = [
-    ArtistInfo(
-      name: 'Sid Sriram',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Sid_Sriram_at_Mersal_Audio_Launch.jpg/500px-Sid_Sriram_at_Mersal_Audio_Launch.jpg',
-    ),
-    ArtistInfo(
-      name: 'Pradeep Kumar',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Pradeep_Kumar_Singer.jpg/500px-Pradeep_Kumar_Singer.jpg',
-    ),
-    ArtistInfo(
-      name: 'Harris Jayaraj',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg/500px-Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg',
-    ),
-    ArtistInfo(
-      name: 'Sai Abhyankar',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Sai_Abhyankkar.jpg/500px-Sai_Abhyankkar.jpg',
-    ),
-    ArtistInfo(
-      name: 'Anirudh Ravichander',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg/500px-Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg',
-    ),
-    ArtistInfo(
-      name: 'Lana Del Rey',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg/500px-Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg',
-    ),
-    ArtistInfo(
-      name: 'A.R. Rahman',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg/500px-A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg',
-    ),
-    ArtistInfo(
-      name: 'K.S. Chithra',
-      avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/K._S._Chithra_2019.jpg/500px-K._S._Chithra_2019.jpg',
-    ),
+    ArtistInfo(name: 'Harris Jayaraj', avatarUrl: ''),
+    ArtistInfo(name: 'Pradeep Kumar', avatarUrl: ''),
+    ArtistInfo(name: 'Sid Sriram', avatarUrl: ''),
+    ArtistInfo(name: 'Sai Abhyankkar', avatarUrl: ''),
+    ArtistInfo(name: 'Anirudh Ravichander', avatarUrl: ''),
+    ArtistInfo(name: 'A. R. Rahman', avatarUrl: ''),
+    ArtistInfo(name: 'Lana Del Rey', avatarUrl: ''),
+    ArtistInfo(name: 'K. S. Chithra', avatarUrl: ''),
   ];
 
   /// Auto-generated mixes for "Made for you"
@@ -68,25 +62,25 @@ class HomeContentService {
       {
         'title': 'Daily Mix 1',
         'subtitle': 'Acoustic & Melodies',
-        'colors': [const Color(0xFF38D6FF), const Color(0xFF1E90FF), const Color(0xFF151B3B)],
+        'colors': [const Color(0xFF1F2B3E), const Color(0xFF161F2E)],
         'songs': _extractSongsForKeywords(history, allCatalog, ['melody', 'acoustic', 'love', 'chill']),
       },
       {
         'title': 'Chill Mix',
         'subtitle': 'Relaxing rhythms & vibes',
-        'colors': [const Color(0xFF00E676), const Color(0xFF00B0FF), const Color(0xFF0B1026)],
+        'colors': [const Color(0xFF1E2F32), const Color(0xFF162125)],
         'songs': _extractSongsForKeywords(history, allCatalog, ['chill', 'peace', 'slow', 'breeze']),
       },
       {
         'title': 'Throwback Mix',
         'subtitle': 'Timeless hits you love',
-        'colors': [const Color(0xFFFF6B6B), const Color(0xFF7C4DFF), const Color(0xFF0B1026)],
+        'colors': [const Color(0xFF33222E), const Color(0xFF221720)],
         'songs': _extractSongsForKeywords(history, allCatalog, ['hits', 'classic', 'harris', 'rey']),
       },
       {
         'title': 'Focus Flow',
         'subtitle': 'Instruments & concentration',
-        'colors': [const Color(0xFFFFC857), const Color(0xFFFF7043), const Color(0xFF151B3B)],
+        'colors': [const Color(0xFF332E1F), const Color(0xFF231E15)],
         'songs': _extractSongsForKeywords(history, allCatalog, ['pradeep', 'instrumental', 'focus', 'flow']),
       },
     ];
@@ -120,46 +114,266 @@ class HomeContentService {
     return result;
   }
 
-  /// Load Trending Tamil songs loaded online from global search with daily caching
-  static Future<List<SongModel>> getTrendingTamilSongs() async {
-    if (_memoryTamilCache != null && _memoryTamilCache!.isNotEmpty) {
-      return _memoryTamilCache!;
-    }
-
+  /// In-app signal tracking: increment local play/like weight
+  static Future<void> recordInAppPlaySignal(String songId) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final cacheFile = File(p.join(dir.path, _tamilCacheFile));
+      final file = File(p.join(dir.path, 'skytune_song_signals.json'));
+      Map<String, int> signals = {};
+      if (file.existsSync()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          signals = Map<String, int>.from(jsonDecode(content));
+        }
+      }
+      signals[songId] = (signals[songId] ?? 0) + 1;
+      await file.writeAsString(jsonEncode(signals), flush: true);
+    } catch (_) {}
+  }
 
-      // Read from disk cache if fresh (within 24 hours)
-      if (cacheFile.existsSync()) {
+  static Future<Map<String, int>> _getInAppSignals() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(p.join(dir.path, 'skytune_song_signals.json'));
+      if (file.existsSync()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          return Map<String, int>.from(jsonDecode(content));
+        }
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  /// Computes ranked trending pool: fetches 100-200 Tamil candidates, scores with weighted mix:
+  /// Recent momentum, total popularity, recency with decay, and in-app play signals.
+  static Future<TrendingPoolState> getTrendingTamilPool({
+    required List<SongModel> localCatalog,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _cachedPoolState != null) {
+      final ageHours = DateTime.now().difference(_cachedPoolState!.lastUpdated).inHours;
+      if (ageHours < 24) {
+        return _cachedPoolState!;
+      }
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final cacheFile = File(p.join(dir.path, _trendingPoolFile));
+
+    // Try reading disk cache first
+    if (!forceRefresh && cacheFile.existsSync()) {
+      try {
         final lastModified = cacheFile.lastModifiedSync();
-        final isFresh = DateTime.now().difference(lastModified).inHours < 24;
+        final ageHours = DateTime.now().difference(lastModified).inHours;
         final raw = await cacheFile.readAsString();
         if (raw.isNotEmpty) {
-          final List<dynamic> list = jsonDecode(raw);
-          final cachedSongs = list.map((e) => SongModel.fromJson(e as Map<String, dynamic>)).toList();
-          if (cachedSongs.isNotEmpty) {
-            _memoryTamilCache = cachedSongs;
-            if (isFresh) {
-              return cachedSongs;
+          final Map<String, dynamic> data = jsonDecode(raw);
+          final List<dynamic> list = data['pool'] as List<dynamic>;
+          final songs = list.map((e) => SongModel.fromJson(e as Map<String, dynamic>)).toList();
+          if (songs.isNotEmpty) {
+            final state = TrendingPoolState(
+              fullRankedPool: songs,
+              currentBatch: songs.take(20).toList(),
+              lastUpdated: lastModified,
+              batchIndex: 0,
+            );
+            _cachedPoolState = state;
+            if (ageHours < 24) {
+              return state;
             }
           }
         }
+      } catch (_) {}
+    }
+
+    // Build fresh candidate pool of 100-200 songs from legal sources
+    try {
+      final inAppSignals = await _getInAppSignals();
+
+      // Query online legal endpoints for fresh Tamil candidates (100 to 200 candidates)
+      final onlineQueries = [
+        'Tamil Trending Hits',
+        'Tamil New Releases',
+        'Top Tamil Songs',
+        'Tamil Melodies',
+        'Tamil Viral Hits',
+        'Tamil Latest Hits',
+      ];
+      final onlineResults = await Future.wait(
+        onlineQueries.map((q) => OnlineMusicSearchService.searchOnline(q, limit: 35)),
+      );
+
+      final List<SongModel> candidatePool = [];
+      for (final r in onlineResults) {
+        candidatePool.addAll(r);
       }
 
-      // Fetch fresh online results
-      final onlineSongs = await OnlineMusicSearchService.searchOnline('Tamil Trending Hits', limit: 20);
-      if (onlineSongs.isNotEmpty) {
-        _memoryTamilCache = onlineSongs;
-        await cacheFile.writeAsString(
-          jsonEncode(onlineSongs.map((s) => s.toJson()).toList()),
-          flush: true,
-        );
-        return onlineSongs;
-      }
-    } catch (_) {}
+      // Add Tamil songs from local catalog
+      final localTamil = localCatalog.where((s) {
+        final g = s.genre.toLowerCase();
+        final t = s.title.toLowerCase();
+        return g.contains('tamil') || t.contains('tamil') || s.storagePath.contains('tamil');
+      }).toList();
+      candidatePool.addAll(localTamil);
 
-    return _memoryTamilCache ?? [];
+      // Deduplicate candidate pool
+      final Map<String, SongModel> dedup = {};
+      for (final s in candidatePool) {
+        if (s.storagePath.isEmpty) continue; // Minimum audio availability check
+        final key = '${FuzzyMatcher.normalize(s.title)}|||${FuzzyMatcher.normalize(s.artist)}';
+        if (!dedup.containsKey(key)) {
+          dedup[key] = s;
+        }
+      }
+
+      final uniqueCandidates = dedup.values.toList();
+
+      // Score candidates
+      final nowYear = DateTime.now().year; // 2026
+      uniqueCandidates.sort((a, b) {
+        final scoreA = _computeTrendingScore(a, nowYear, inAppSignals);
+        final scoreB = _computeTrendingScore(b, nowYear, inAppSignals);
+        return scoreB.compareTo(scoreA);
+      });
+
+      final fullPool = uniqueCandidates.take(120).toList();
+      final batch = fullPool.take(20).toList();
+
+      final newState = TrendingPoolState(
+        fullRankedPool: fullPool,
+        currentBatch: batch,
+        lastUpdated: DateTime.now(),
+        batchIndex: 0,
+      );
+
+      _cachedPoolState = newState;
+      _recentlyServedSongIds.clear();
+      _recentlyServedSongIds.addAll(batch.map((s) => s.id));
+
+      // Save pool to disk cache
+      await cacheFile.writeAsString(
+        jsonEncode({
+          'pool': fullPool.map((s) => s.toJson()).toList(),
+          'updated_at': DateTime.now().toIso8601String(),
+        }),
+        flush: true,
+      );
+
+      return newState;
+    } catch (_) {
+      if (_cachedPoolState != null) return _cachedPoolState!;
+      return TrendingPoolState(
+        fullRankedPool: const [],
+        currentBatch: const [],
+        lastUpdated: DateTime.now(),
+      );
+    }
+  }
+
+  static double _computeTrendingScore(SongModel s, int nowYear, Map<String, int> signals) {
+    double score = 0.0;
+
+    // 1. Total popularity
+    score += (s.popularity / 200000.0).clamp(0.0, 4.0);
+
+    // 2. Recency boost with decay
+    if (s.releaseDate != null && s.releaseDate!.isNotEmpty) {
+      final m = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(s.releaseDate!);
+      if (m != null) {
+        final year = int.tryParse(m.group(1)!) ?? 0;
+        final ageYears = nowYear - year;
+        if (ageYears <= 0) {
+          score += 5.0; // Current year release
+        } else if (ageYears == 1) {
+          score += 4.0;
+        } else if (ageYears == 2) {
+          score += 2.5;
+        } else if (ageYears <= 5) {
+          score += 1.0;
+        } else {
+          // Penalize old songs unless they have strong recent momentum
+          score -= 1.5;
+        }
+      }
+    }
+
+    // 3. In-app user plays/downloads signal
+    final inAppCount = signals[s.id] ?? 0;
+    score += (inAppCount * 1.5).clamp(0.0, 5.0);
+
+    return score;
+  }
+
+  /// Tapping Refresh produces a fresh batch of 20 songs from the ranked pool
+  /// with slight randomness among similarly ranked songs, without repeating until pool is used up.
+  static TrendingPoolState getNextTrendingBatch() {
+    if (_cachedPoolState == null || _cachedPoolState!.fullRankedPool.isEmpty) {
+      return TrendingPoolState(
+        fullRankedPool: const [],
+        currentBatch: const [],
+        lastUpdated: DateTime.now(),
+      );
+    }
+
+    final pool = _cachedPoolState!.fullRankedPool;
+    if (pool.length <= 20) {
+      return _cachedPoolState!;
+    }
+
+    final rand = Random();
+    int nextBatchIdx = _cachedPoolState!.batchIndex + 1;
+    int start = (nextBatchIdx * 20) % pool.length;
+    if (start + 20 > pool.length) {
+      start = 0;
+      nextBatchIdx = 0;
+      _recentlyServedSongIds.clear();
+    }
+
+    final candidates = pool.skip(start).take(20).toList();
+    // Subtle shuffle among adjacent songs for natural diversity
+    candidates.shuffle(rand);
+
+    final updatedState = TrendingPoolState(
+      fullRankedPool: pool,
+      currentBatch: candidates,
+      lastUpdated: _cachedPoolState!.lastUpdated,
+      batchIndex: nextBatchIdx,
+    );
+    _cachedPoolState = updatedState;
+    return updatedState;
+  }
+
+  /// Provides trending Tamil songs with fallback, candidate scoring, caching, and batch shifting
+  static Future<List<SongModel>> getTrendingTamilSongs({
+    int limit = 20,
+    bool forceNextBatch = false,
+    List<SongModel> localCatalog = const [],
+  }) async {
+    if (forceNextBatch) {
+      final nextState = getNextTrendingBatch();
+      if (nextState.currentBatch.isNotEmpty) {
+        return nextState.currentBatch.take(limit).toList();
+      }
+    }
+
+    final poolState = await getTrendingTamilPool(
+      localCatalog: localCatalog,
+      forceRefresh: false,
+    );
+
+    if (poolState.currentBatch.isNotEmpty) {
+      return poolState.currentBatch.take(limit).toList();
+    }
+    return poolState.fullRankedPool.take(limit).toList();
+  }
+
+  static String formatTimeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 2) return 'Updated just now';
+    if (diff.inMinutes < 60) return 'Updated ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Updated ${diff.inHours}h ago';
+    return 'Updated yesterday';
   }
 }
 

@@ -21,6 +21,7 @@ class SongTile extends ConsumerWidget {
   final Widget? dragHandle;
   final VoidCallback? onRemoveFromPlaylist;
   final bool showMetadataDetails;
+  final int? rankNumber;
 
   const SongTile({
     super.key,
@@ -31,6 +32,7 @@ class SongTile extends ConsumerWidget {
     this.dragHandle,
     this.onRemoveFromPlaylist,
     this.showMetadataDetails = false,
+    this.rankNumber,
   });
 
   void _showSongOptions(BuildContext context, WidgetRef ref) {
@@ -139,6 +141,21 @@ class SongTile extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: Dimensions.space8),
         child: Row(
           children: [
+            if (rankNumber != null) ...[
+              SizedBox(
+                width: 24,
+                child: Text(
+                  '$rankNumber',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: rankNumber! <= 3 ? AppColors.accent : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: Dimensions.space8),
+            ],
             Stack(
               alignment: Alignment.center,
               children: [

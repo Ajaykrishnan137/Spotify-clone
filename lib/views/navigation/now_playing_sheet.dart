@@ -74,19 +74,9 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
 
     final effectiveColor = _dominantColor != AppColors.surface ? _dominantColor : themeColor;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
+    return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF1E90FF), // Primary Sky Blue
-            Color(0xFF5B4BFF), // Deep Blue/Purple
-            AppColors.deepNightBlue,
-          ],
-          stops: [0.0, 0.45, 0.85],
-        ),
+        color: AppColors.background,
       ),
       child: SafeArea(
         child: Padding(
@@ -152,13 +142,12 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                 curve: Curves.easeOutBack,
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                    boxShadow: [
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
                       BoxShadow(
-                        color: effectiveColor.withOpacity(playerState.isPlaying ? 0.35 : 0.1),
-                        blurRadius: playerState.isPlaying ? 28 : 12,
-                        spreadRadius: playerState.isPlaying ? 4 : 0,
-                        offset: const Offset(0, 10),
+                        color: Colors.black45,
+                        blurRadius: 16,
+                        offset: Offset(0, 8),
                       ),
                     ],
                   ),
@@ -166,7 +155,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                     url: song.coverUrl,
                     width: MediaQuery.of(context).size.width - 64,
                     height: MediaQuery.of(context).size.width - 64,
-                    borderRadius: Dimensions.radiusLarge,
+                    borderRadius: 16,
                   ),
                 ),
               ),
@@ -210,7 +199,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                             final formatText = isFlac ? 'FLAC' : (isOgg ? 'OGG' : 'MP3');
                             final detailText = isLossless ? 'Lossless' : '320 kbps';
 
-                            final badgeColor = isLossless ? AppColors.softGold : AppColors.cyanAccent;
+                            final badgeColor = isLossless ? AppColors.softGold : AppColors.accent;
 
                             return ConstrainedBox(
                               constraints: BoxConstraints(
@@ -219,9 +208,9 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: AppColors.surface.withOpacity(0.85),
+                                  color: AppColors.surface,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: badgeColor.withOpacity(0.5), width: 1),
+                                  border: Border.all(color: AppColors.elevated, width: 1),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -279,13 +268,13 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                       ),
                       // Like button (toggles liked playlist)
                       IconButton(
-                        icon: const Icon(Icons.favorite, color: AppColors.sunsetCoral, size: 28),
+                        icon: const Icon(Icons.favorite, color: AppColors.secondaryAccent, size: 28),
                         tooltip: 'Like Song',
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Added "${song.title}" to Liked Songs'),
-                              backgroundColor: AppColors.sunsetCoral,
+                              backgroundColor: AppColors.secondaryAccent,
                               duration: const Duration(seconds: 1),
                             ),
                           );
@@ -296,13 +285,13 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                 ],
               ),
               const SizedBox(height: Dimensions.space16),
-              // Progress Slider (Cyan Accent)
+              // Progress Slider (Primary Accent)
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                   overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                  activeTrackColor: AppColors.cyanAccent,
-                  inactiveTrackColor: AppColors.textSecondary.withOpacity(0.3),
+                  activeTrackColor: AppColors.accent,
+                  inactiveTrackColor: AppColors.elevated,
                   thumbColor: Colors.white,
                 ),
                 child: Slider(
@@ -341,7 +330,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                     icon: Icon(
                       Icons.shuffle,
                       size: 26,
-                      color: playerState.isShuffle ? AppColors.cyanAccent : AppColors.textSecondary,
+                      color: playerState.isShuffle ? AppColors.accent : AppColors.textSecondary,
                     ),
                     tooltip: 'Shuffle: ${playerState.isShuffle ? "ON" : "OFF"}',
                     onPressed: () {
@@ -361,21 +350,9 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                     child: Container(
                       width: 72,
                       height: 72,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E90FF), Color(0xFF38D6FF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                      decoration: const BoxDecoration(
+                        color: AppColors.accent,
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF38D6FF).withOpacity(0.45),
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
                       ),
                       child: Center(
                         child: Icon(
@@ -398,7 +375,7 @@ class _NowPlayingSheetState extends ConsumerState<NowPlayingSheet> {
                           ? Icons.repeat_one
                           : Icons.repeat,
                       size: 26,
-                      color: playerState.loopMode != PlayerLoopMode.off ? AppColors.cyanAccent : AppColors.textSecondary,
+                      color: playerState.loopMode != PlayerLoopMode.off ? AppColors.accent : AppColors.textSecondary,
                     ),
                     tooltip: 'Repeat: ${playerState.loopMode.name.toUpperCase()}',
                     onPressed: () {

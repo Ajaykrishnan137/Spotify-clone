@@ -1,13 +1,16 @@
 import 'dart:math';
+import 'fuzzy_matcher.dart';
 
 enum QueryIntentType {
-  specificSongOrArtist,
+  artistStrictQuery,
   playlistType,
+  specificSongOrTitle,
 }
 
 class QueryIntentResult {
   final QueryIntentType type;
   final String title;
+  final String? matchedArtistName;
   final List<String> tags;
   final List<String> genres;
   final List<String> relatedPlaylists;
@@ -17,6 +20,7 @@ class QueryIntentResult {
   const QueryIntentResult({
     required this.type,
     required this.title,
+    this.matchedArtistName,
     required this.tags,
     required this.genres,
     this.relatedPlaylists = const [],
@@ -28,7 +32,69 @@ class QueryIntentResult {
 class QueryIntentEngine {
   QueryIntentEngine._();
 
-  // Mood/keyword dictionary mapping queries to tags, genres, and languages for each legal source
+  /// Canonical artists list with known aliases and spelling variants
+  static const Map<String, List<String>> _artistAliases = {
+    'Harris Jayaraj': [
+      'harris jayaraj', 'haris jayaraj', 'haris jeyaraj', 'harris jeyaraj', 'hariss jeyaraj',
+      'ஹாரிஸ் ஜெயராஜ்', 'harris', 'jayaraj', 'jeyaraj'
+    ],
+    'Pradeep Kumar': [
+      'pradeep kumar', 'pradeep', 'பிரதீப் குமார்', 'pradeepkumar'
+    ],
+    'Sid Sriram': [
+      'sid sriram', 'sidsriram', 'சித் ஸ்ரீராம்', 'sid'
+    ],
+    'Sai Abhyankkar': [
+      'sai abhyankkar', 'sai abhyankar', 'sai abyankar', 'சாய் அபயங்கர்'
+    ],
+    'Anirudh Ravichander': [
+      'anirudh ravichander', 'anirudh', 'அனிருத்', 'ani'
+    ],
+    'A. R. Rahman': [
+      'a. r. rahman', 'a.r. rahman', 'ar rahman', 'arrahman', 'rahman', 'ஏ. ஆர். ரகுமான்'
+    ],
+    'Lana Del Rey': [
+      'lana del rey', 'lana del ray', 'lanadelrey', 'lana'
+    ],
+    'K. S. Chithra': [
+      'k. s. chithra', 'k.s. chithra', 'ks chithra', 'chithra', 'சித்ரா'
+    ],
+    'Shreya Ghoshal': [
+      'shreya ghoshal', 'shreya ghosal', 'ஷ்ரேயா கோஷல்', 'shreya'
+    ],
+    'Yuvan Shankar Raja': [
+      'yuvan shankar raja', 'yuvan', 'யுவன் சங்கர் ராஜா', 'u1'
+    ],
+    'G. V. Prakash': [
+      'g. v. prakash', 'g.v. prakash', 'gv prakash', 'g v prakash'
+    ],
+    'Santhosh Narayanan': [
+      'santhosh narayanan', 'santosh narayanan', 'சந்தோஷ் நாராயணன்', 'sana'
+    ],
+    'Chinmayi': [
+      'chinmayi', 'chinmayi sripada', 'chinmayee', 'சின்மயி'
+    ],
+    'Karthik': [
+      'karthik', 'கார்த்திக்'
+    ],
+    'Hariharan': [
+      'hariharan', 'ஹரிஹரன்'
+    ],
+    'Deva': [
+      'deva', 'தேவா'
+    ],
+    'Ilayaraja': [
+      'ilayaraja', 'ilayaraaja', 'illayaraja', 'இளையராஜா'
+    ],
+    'Vijay Yesudas': [
+      'vijay yesudas', 'விஜய் யேசுதாஸ்'
+    ],
+    'Dhanush': [
+      'dhanush', 'தனுஷ்'
+    ],
+  };
+
+  /// Mood/keyword dictionary mapping queries to tags, genres, and languages for each legal source
   static final Map<String, Map<String, dynamic>> _keywordDictionary = {
     // Sleep / Calm / Relax
     'sleep': {
@@ -163,12 +229,6 @@ class QueryIntentEngine {
       'genres': ['Party', 'Dance', 'EDM', 'Pop'],
       'related': ['Club Nights', 'Weekend Party', 'Dance Floor Hits'],
     },
-    'dance': {
-      'title': 'High Energy Dance Hits',
-      'tags': ['dance', 'groove', 'electronic', 'club', 'party'],
-      'genres': ['Dance', 'Electronic', 'Pop'],
-      'related': ['Dance Pop', 'Electro Groove'],
-    },
 
     // Focus / Study / Coding
     'focus': {
@@ -177,12 +237,6 @@ class QueryIntentEngine {
       'genres': ['Focus', 'Instrumental', 'Ambient', 'Classical'],
       'related': ['Deep Focus', 'Coding Flow', 'Study Lo-Fi'],
     },
-    'study': {
-      'title': 'Study & Concentration Beats',
-      'tags': ['study', 'instrumental', 'focus', 'piano', 'lo-fi'],
-      'genres': ['Study', 'Instrumental', 'Lo-Fi'],
-      'related': ['Study Beats', 'Quiet Library'],
-    },
 
     // Devotional / Spiritual
     'devotional': {
@@ -190,18 +244,6 @@ class QueryIntentEngine {
       'tags': ['devotional', 'spiritual', 'prayer', 'temple', 'divine', 'peace'],
       'genres': ['Devotional', 'Spiritual', 'Traditional'],
       'related': ['Morning Prayers', 'Peaceful Devotion', 'Divine Chants'],
-    },
-    'bhakti': {
-      'title': 'Bhakti & Divine Songs',
-      'tags': ['devotional', 'prayer', 'divine', 'temple'],
-      'genres': ['Devotional', 'Spiritual'],
-      'related': ['Divine Melodies', 'Temple Chants'],
-    },
-    'பக்தி': {
-      'title': 'பக்தி பாடல்கள் (Devotional Songs)',
-      'tags': ['devotional', 'divine', 'spiritual', 'tamil'],
-      'genres': ['Devotional', 'Tamil Traditional'],
-      'related': ['காலை பக்தி', 'தெய்வீக ராகங்கள்'],
     },
 
     // Melody
@@ -212,35 +254,21 @@ class QueryIntentEngine {
       'related': ['Soulful Melodies', 'Evergreen Melodies', 'Gentle Breeze'],
     },
 
-    // Era: 90s, 80s, 2000s, Retro, Vintage
+    // Era: 90s
     '90s': {
       'title': 'Golden 90s Hits',
       'tags': ['90s', 'golden era', 'retro', 'vintage', 'nostalgia', 'classic'],
       'genres': ['90s', 'Retro', 'Classic Pop'],
       'related': ['90s Tamil Classics', '90s Pop Gold', 'Retro Nostalgia'],
     },
-    '80s': {
-      'title': '80s Retro Classics',
-      'tags': ['80s', 'retro', 'synth', 'classic', 'vintage'],
-      'genres': ['80s', 'Retro', 'Synthwave'],
-      'related': ['80s Rewind', 'Vintage Hits'],
-    },
-    'retro': {
-      'title': 'Timeless Retro Hits',
-      'tags': ['retro', 'vintage', 'classic', 'oldies'],
-      'genres': ['Retro', 'Oldies', 'Classic'],
-      'related': ['Golden Age', 'Retro Romance'],
-    },
   };
 
-  /// Common words indicating playlist intent
   static const Set<String> _playlistIntentKeywords = {
     'songs', 'song', 'playlist', 'hits', 'tracks', 'music', 'mix', 'top', 'best',
     'collection', 'anthems', 'tunes', 'vibes', 'beats', 'paadalgal', 'paatu', 'padalgal',
     'பாடல்கள்', 'பாட்டு', 'இசை'
   };
 
-  /// Common words indicating latest or trending sorting
   static const Set<String> _latestKeywords = {
     'new', 'latest', 'newest', 'recent', 'pudhu', 'puthiya', 'புதிய', 'this week', '2025', '2026'
   };
@@ -249,15 +277,49 @@ class QueryIntentEngine {
     'trending', 'trend', 'top', 'popular', 'hits', 'viral', 'best of', 'famous'
   };
 
+  /// Match query against known artists and aliases
+  static String? matchArtistQuery(String cleanQuery) {
+    final qNorm = FuzzyMatcher.normalize(cleanQuery);
+
+    for (final entry in _artistAliases.entries) {
+      final canonical = entry.key;
+      final aliases = entry.value;
+
+      for (final alias in aliases) {
+        final aNorm = FuzzyMatcher.normalize(alias);
+        if (qNorm == aNorm) return canonical;
+
+        // Check high threshold fuzzy match (>= 0.85)
+        final sim = FuzzyMatcher.computeCombinedFuzzyScore(qNorm, aNorm);
+        if (sim >= 0.85) {
+          return canonical;
+        }
+      }
+    }
+    return null;
+  }
+
   /// Analyze raw query string and return intent classification
   static QueryIntentResult analyzeQuery(String rawQuery) {
     final clean = rawQuery.trim().toLowerCase();
     if (clean.isEmpty) {
       return const QueryIntentResult(
-        type: QueryIntentType.specificSongOrArtist,
+        type: QueryIntentType.specificSongOrTitle,
         title: '',
         tags: [],
         genres: [],
+      );
+    }
+
+    // 1. Check strict artist detection first
+    final matchedArtist = matchArtistQuery(clean);
+    if (matchedArtist != null) {
+      return QueryIntentResult(
+        type: QueryIntentType.artistStrictQuery,
+        title: matchedArtist,
+        matchedArtistName: matchedArtist,
+        tags: const [],
+        genres: const [],
       );
     }
 
@@ -298,7 +360,6 @@ class QueryIntentEngine {
       }
     }
 
-    // Also test multi-word tokens (e.g. "road trip", "best of")
     for (final key in _keywordDictionary.keys) {
       if (clean.contains(key)) {
         final dict = _keywordDictionary[key]!;
@@ -317,10 +378,8 @@ class QueryIntentEngine {
         (hasTrendingKeyword && tokens.length > 1);
 
     if (isPlaylistQuery) {
-      // Build a title for the generated playlist card
       String title = resolvedTitle ?? '';
       if (title.isEmpty) {
-        // Construct title from non-noise tokens
         final meaningfulTokens = tokens.where((t) =>
             t != 'songs' && t != 'song' && t != 'playlist' && t != 'music' && t != 'tracks');
         if (meaningfulTokens.isNotEmpty) {
@@ -330,7 +389,6 @@ class QueryIntentEngine {
         }
       }
 
-      // Add specific combinations (e.g. "tamil" + "travel" -> "Road Trip Tamil")
       if (clean.contains('tamil') && clean.contains('travel')) {
         title = 'Tamil Travelling Songs';
         matchedRelated.add('Road Trip Tamil');
@@ -363,7 +421,7 @@ class QueryIntentEngine {
     }
 
     return QueryIntentResult(
-      type: QueryIntentType.specificSongOrArtist,
+      type: QueryIntentType.specificSongOrTitle,
       title: rawQuery,
       tags: const [],
       genres: const [],

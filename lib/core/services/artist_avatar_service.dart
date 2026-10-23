@@ -1,43 +1,95 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'fuzzy_matcher.dart';
 
 class ArtistAvatarService {
   ArtistAvatarService._();
 
   static final Map<String, String?> _memoryAvatarCache = {};
+  static final Map<String, int> _cacheTimestamps = {};
+  static final Map<String, int> _failureCounts = {};
   static bool _diskCacheLoaded = false;
-  static const String _cacheFileName = 'skytune_artist_avatars.json';
+  static const String _cacheFileName = 'skytune_artist_avatars_v3.json';
+  static const int _cacheDurationDays = 30;
 
-  /// Standard curated fallback legal images (Wikimedia / Open license) for key artists
-  static const Map<String, String> _curatedLegalAvatars = {
-    'sid sriram': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Sid_Sriram_at_Mersal_Audio_Launch.jpg/500px-Sid_Sriram_at_Mersal_Audio_Launch.jpg',
-    'pradeep kumar': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Pradeep_Kumar_Singer.jpg/500px-Pradeep_Kumar_Singer.jpg',
-    'harris jayaraj': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg/500px-Harris_Jayaraj_at_Kaappaan_Audio_Launch.jpg',
-    'sai abhyankar': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Sai_Abhyankkar.jpg/500px-Sai_Abhyankkar.jpg',
-    'sai abyankar': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Sai_Abhyankkar.jpg/500px-Sai_Abhyankkar.jpg',
-    'anirudh ravichander': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg/500px-Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg',
-    'anirudh': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg/500px-Anirudh_Ravichander_at_Audi_Ritz_Style_Awards_2015.jpg',
-    'lana del rey': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg/500px-Lana_Del_Rey_at_the_2019_Grammy_Awards.jpg',
-    'a.r. rahman': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg/500px-A._R._Rahman_at_the_Global_Indian_Music_Awards_2012.jpg',
-    'ar rahman': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/A._R._Rahman_at_the_Global_Indian_Music_Artist_2012.jpg/500px-A._R._Rahman_at_the_Global_Indian_Music_Artist_2012.jpg',
-    'k.s. chithra': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/K._S._Chithra_2019.jpg/500px-K._S._Chithra_2019.jpg',
-    'ks chithra': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/K._S._Chithra_2019.jpg/500px-K._S._Chithra_2019.jpg',
-    'shreya ghoshal': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Shreya_Ghoshal_at_Filmfare_Awards.jpg/500px-Shreya_Ghoshal_at_Filmfare_Awards.jpg',
-    'yuvan shankar raja': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Yuvan_Shankar_Raja_at_Raja_Rani_Audio_Launch.jpg/500px-Yuvan_Shankar_Raja_at_Raja_Rani_Audio_Launch.jpg',
-    'g.v. prakash': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/GV_Prakash_Kumar_at_Kaala_Audio_Launch.jpg/500px-GV_Prakash_Kumar_at_Kaala_Audio_Launch.jpg',
-    'gv prakash': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/GV_Prakash_Kumar_at_Kaala_Audio_Launch.jpg/500px-GV_Prakash_Kumar_at_Kaala_Audio_Launch.jpg',
-    'santhosh narayanan': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Santhosh_Narayanan_at_Kaala_Audio_Launch.jpg/500px-Santhosh_Narayanan_at_Kaala_Audio_Launch.jpg',
-    'chinmayi': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Chinmayi_Sripaada.jpg/500px-Chinmayi_Sripaada.jpg',
-    'karthik': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Karthik_Singer_2016.jpg/500px-Karthik_Singer_2016.jpg',
-    'hariharan': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Hariharan_singer.jpg/500px-Hariharan_singer.jpg',
+  static const String _userAgent = 'SkyTuneMusicPlayer/1.0 (contact@skytune.app; legal music player)';
+
+  /// Canonical aliases and common spelling variants mapping to verified Wikipedia page titles
+  static const Map<String, String> _artistWikipediaPageTitles = {
+    'harris jayaraj': 'Harris Jayaraj',
+    'haris jayaraj': 'Harris Jayaraj',
+    'haris jeyaraj': 'Harris Jayaraj',
+    'harris jeyaraj': 'Harris Jayaraj',
+    'hariss jeyaraj': 'Harris Jayaraj',
+    'haris jayaraaj': 'Harris Jayaraj',
+    'ஹாரிஸ் ஜெயராஜ்': 'Harris Jayaraj',
+    'pradeep kumar': 'Pradeep Kumar (musician)',
+    'pradeep': 'Pradeep Kumar (musician)',
+    'பிரதீப் குமார்': 'Pradeep Kumar (musician)',
+    'sid sriram': 'Sid Sriram',
+    'சித் ஸ்ரீராம்': 'Sid Sriram',
+    'sai abhyankkar': 'Sai Abhyankkar',
+    'sai abhyankar': 'Sai Abhyankkar',
+    'sai abyankar': 'Sai Abhyankkar',
+    'சாய் அபயங்கர்': 'Sai Abhyankkar',
+    'anirudh ravichander': 'Anirudh Ravichander',
+    'anirudh': 'Anirudh Ravichander',
+    'அனிருத்': 'Anirudh Ravichander',
+    'a. r. rahman': 'A. R. Rahman',
+    'a.r. rahman': 'A. R. Rahman',
+    'ar rahman': 'A. R. Rahman',
+    'ஏ. ஆர். ரகுமான்': 'A. R. Rahman',
+    'lana del rey': 'Lana Del Rey',
+    'k. s. chithra': 'K. S. Chithra',
+    'k.s. chithra': 'K. S. Chithra',
+    'ks chithra': 'K. S. Chithra',
+    'chithra': 'K. S. Chithra',
+    'சித்ரா': 'K. S. Chithra',
+    'shreya ghoshal': 'Shreya Ghoshal',
+    'shreya ghosal': 'Shreya Ghoshal',
+    'ஷ்ரேயா கோஷல்': 'Shreya Ghoshal',
+    'yuvan shankar raja': 'Yuvan Shankar Raja',
+    'yuvan': 'Yuvan Shankar Raja',
+    'யுவன் சங்கர் ராஜா': 'Yuvan Shankar Raja',
+    'g. v. prakash': 'G. V. Prakash Kumar',
+    'g.v. prakash': 'G. V. Prakash Kumar',
+    'gv prakash': 'G. V. Prakash Kumar',
+    'g v prakash': 'G. V. Prakash Kumar',
+    'santhosh narayanan': 'Santhosh Narayanan',
+    'santosh narayanan': 'Santhosh Narayanan',
+    'சந்தோஷ் நாராயணன்': 'Santhosh Narayanan',
+    'chinmayi': 'Chinmayi Sripaada',
+    'chinmayi sripada': 'Chinmayi Sripaada',
+    'chinmayee': 'Chinmayi Sripaada',
+    'சின்மயி': 'Chinmayi Sripaada',
+    'karthik': 'Karthik (singer)',
+    'கார்த்திக்': 'Karthik (singer)',
+    'hariharan': 'Hariharan (singer)',
+    'ஹரிஹரன்': 'Hariharan (singer)',
+    'dhanush': 'Dhanush',
+    'தனுஷ்': 'Dhanush',
+    'vijay yesudas': 'Vijay Yesudas',
+    'விஜய் யேசுதாஸ்': 'Vijay Yesudas',
+    'unnikrishnan': 'P. Unnikrishnan',
+    'sadhana sargam': 'Sadhana Sargam',
+    'swarnalatha': 'Swarnalatha',
+    'spb': 'S. P. Balasubrahmanyam',
+    's. p. balasubrahmanyam': 'S. P. Balasubrahmanyam',
+    'ilayaraja': 'Ilaiyaraaja',
+    'ilayaraaja': 'Ilaiyaraaja',
+    'illayaraja': 'Ilaiyaraaja',
+    'இளையராஜா': 'Ilaiyaraaja',
+    'deva': 'Deva (composer)',
+    'தேவா': 'Deva (composer)',
   };
 
-  /// Preloads cached avatar URLs from disk
+  /// Preloads cached avatar URLs from disk (valid for 30 days)
   static Future<void> init() async {
     if (_diskCacheLoaded) return;
     try {
@@ -46,14 +98,23 @@ class ArtistAvatarService {
       if (file.existsSync()) {
         final content = await file.readAsString();
         final Map<String, dynamic> decoded = jsonDecode(content);
-        decoded.forEach((key, val) {
-          if (val is String && val.isNotEmpty) {
-            _memoryAvatarCache[key.toLowerCase().trim()] = val;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final maxAgeMs = _cacheDurationDays * 24 * 60 * 60 * 1000;
+
+        decoded.forEach((key, data) {
+          if (data is Map<String, dynamic>) {
+            final url = data['url'] as String?;
+            final ts = data['ts'] as int? ?? 0;
+            if (url != null && url.isNotEmpty && (now - ts) < maxAgeMs) {
+              _memoryAvatarCache[key] = url;
+              _cacheTimestamps[key] = ts;
+            }
           }
         });
       }
       _diskCacheLoaded = true;
-    } catch (_) {
+    } catch (e) {
+      dev.log('[ArtistAvatarService] init failed: $e');
       _diskCacheLoaded = true;
     }
   }
@@ -62,11 +123,20 @@ class ArtistAvatarService {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(p.join(dir.path, _cacheFileName));
-      await file.writeAsString(jsonEncode(_memoryAvatarCache), flush: true);
+      final Map<String, dynamic> export = {};
+      _memoryAvatarCache.forEach((key, url) {
+        if (url != null) {
+          export[key] = {
+            'url': url,
+            'ts': _cacheTimestamps[key] ?? DateTime.now().millisecondsSinceEpoch,
+          };
+        }
+      });
+      await file.writeAsString(jsonEncode(export), flush: true);
     } catch (_) {}
   }
 
-  /// Extracts clean initials from an artist name (up to 2 letters, capitalized)
+  /// Extracts clean initials (1 or 2 uppercase letters)
   static String getInitials(String artistName) {
     final clean = artistName.replaceAll(RegExp(r'[^\w\s]'), '').trim();
     if (clean.isEmpty) return 'ST';
@@ -77,93 +147,242 @@ class ArtistAvatarService {
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
-  /// Returns a curated SkyTune gradient for an artist based on their name hash
-  static LinearGradient getGradientForArtist(String artistName) {
-    const gradients = [
-      LinearGradient(colors: [Color(0xFF38D6FF), Color(0xFF1E90FF)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFF00E676), Color(0xFF00B0FF)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFFFF5252), Color(0xFFFF7043)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFF7C4DFF), Color(0xFF38D6FF)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFFFFC857), Color(0xFFFF8F00)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFFE91E63), Color(0xFF9C27B0)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-      LinearGradient(colors: [Color(0xFF00B4D8), Color(0xFF0077B6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+  /// Flat solid color for the initials avatar (no gradient, no glow)
+  static Color getColorForArtist(String artistName) {
+    const flatColors = [
+      Color(0xFF2C3E5A),
+      Color(0xFF27434D),
+      Color(0xFF3B3352),
+      Color(0xFF42352F),
+      Color(0xFF2B4436),
+      Color(0xFF333D4F),
+      Color(0xFF453037),
     ];
-    final idx = artistName.hashCode.abs() % gradients.length;
-    return gradients[idx];
+    final idx = artistName.hashCode.abs() % flatColors.length;
+    return flatColors[idx];
   }
 
-  /// Resolves an artist avatar URL from memory/disk cache, curated legal mappings, Jamendo API, or Wikimedia Commons
-  static Future<String?> getArtistAvatarUrl(String artistName) async {
-    final key = artistName.toLowerCase().trim();
-    if (key.isEmpty) return null;
+  /// Validates image URL: HTTP 200, Content-Type image, minimum size (>500 bytes)
+  static Future<bool> validateImageUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final req = await http.get(uri, headers: {
+        'User-Agent': _userAgent,
+        'Accept': 'image/*,*/*',
+      }).timeout(const Duration(seconds: 4));
+      if (req.statusCode == 200) {
+        final cType = (req.headers['content-type'] ?? '').toLowerCase();
+        final bodyBytes = req.bodyBytes;
+        if ((cType.startsWith('image/') || cType.contains('octet-stream') || url.endsWith('.jpg') || url.endsWith('.png')) &&
+            bodyBytes.length > 500) {
+          return true;
+        } else {
+          dev.log('[ArtistAvatarService] Validation failed for $url: cType=$cType, length=${bodyBytes.length}');
+        }
+      } else {
+        dev.log('[ArtistAvatarService] Validation failed for $url: HTTP ${req.statusCode}');
+      }
+    } catch (e) {
+      dev.log('[ArtistAvatarService] Validation exception for $url: $e');
+    }
+    return false;
+  }
+
+  /// Resolves an artist avatar URL following strict fallback chain with detailed logging:
+  /// 1. Legal source image (e.g. Jamendo / local / provided)
+  /// 2. Wikipedia / Wikidata / Wikimedia Commons official API (300px width) with musician validation
+  /// 3. Returns null (triggering flat solid initials fallback)
+  static Future<String?> getArtistAvatarUrl(
+    String artistName, {
+    String? sourceProvidedUrl,
+  }) async {
+    final cleanName = artistName.trim();
+    if (cleanName.isEmpty) {
+      dev.log('[ArtistAvatarService] Empty artist name provided. Skipping.');
+      return null;
+    }
+    final cacheKey = FuzzyMatcher.normalize(cleanName);
 
     await init();
 
-    if (_memoryAvatarCache.containsKey(key)) {
-      return _memoryAvatarCache[key];
+    if (_memoryAvatarCache.containsKey(cacheKey) && _memoryAvatarCache[cacheKey] != null) {
+      return _memoryAvatarCache[cacheKey];
     }
 
-    // 1. Check curated list
-    if (_curatedLegalAvatars.containsKey(key)) {
-      final url = _curatedLegalAvatars[key]!;
-      _memoryAvatarCache[key] = url;
-      _persistCache();
-      return url;
+    // Check failure counts (retry with backoff up to 3 times per app session)
+    final failures = _failureCounts[cacheKey] ?? 0;
+    if (failures >= 3) {
+      dev.log('[ArtistAvatarService] Skipping $cleanName: reached maximum 3 retry attempts in this session.');
+      return null;
     }
 
-    // Check fuzzy match in curated list
-    for (final entry in _curatedLegalAvatars.entries) {
-      if (key.contains(entry.key) || entry.key.contains(key)) {
-        _memoryAvatarCache[key] = entry.value;
+    dev.log('[ArtistAvatarService] [START] Resolving image for "$cleanName" (normalized key: "$cacheKey")...');
+
+    // -------------------------------------------------------------
+    // Chain A: Legal source provided URL (Jamendo, metadata, etc.)
+    // -------------------------------------------------------------
+    if (sourceProvidedUrl != null && sourceProvidedUrl.isNotEmpty && !sourceProvidedUrl.contains('default-music')) {
+      dev.log('[ArtistAvatarService] Step A: Checking source-provided image URL: $sourceProvidedUrl');
+      final valid = await validateImageUrl(sourceProvidedUrl);
+      if (valid) {
+        dev.log('[ArtistAvatarService] Step A SUCCESS: Legal source image verified for "$cleanName".');
+        _memoryAvatarCache[cacheKey] = sourceProvidedUrl;
+        _cacheTimestamps[cacheKey] = DateTime.now().millisecondsSinceEpoch;
         _persistCache();
-        return entry.value;
+        return sourceProvidedUrl;
+      } else {
+        dev.log('[ArtistAvatarService] Step A FAILED: Legal source URL invalid, blocked, or not an image.');
+      }
+    } else {
+      dev.log('[ArtistAvatarService] Step A SKIPPED: No source-provided image URL for "$cleanName".');
+    }
+
+    // -------------------------------------------------------------
+    // Chain B: Official Wikipedia / Wikidata / Wikimedia Commons APIs
+    // -------------------------------------------------------------
+    dev.log('[ArtistAvatarService] Step B: Querying official Wikimedia / Wikipedia APIs for "$cleanName"...');
+    final wikiUrl = await _resolveFromWikipediaOfficial(cleanName, cacheKey);
+    if (wikiUrl != null) {
+      dev.log('[ArtistAvatarService] Step B SUCCESS: Verified official photo found: $wikiUrl');
+      _memoryAvatarCache[cacheKey] = wikiUrl;
+      _cacheTimestamps[cacheKey] = DateTime.now().millisecondsSinceEpoch;
+      _persistCache();
+      return wikiUrl;
+    } else {
+      dev.log('[ArtistAvatarService] Step B FAILED: No verified musician image found on Wikimedia / Wikipedia.');
+    }
+
+    // -------------------------------------------------------------
+    // Chain C: Failed all valid photo lookups -> Flat Initials Avatar
+    // -------------------------------------------------------------
+    _failureCounts[cacheKey] = failures + 1;
+    dev.log('[ArtistAvatarService] Step C FALLBACK: All image sources failed for "$cleanName" (Attempt ${failures + 1}/3). Using flat solid initials avatar.');
+    return null;
+  }
+
+  static Future<String?> _resolveFromWikipediaOfficial(String originalName, String cacheKey) async {
+    // 1. Determine candidate titles based on alias map and normalized spelling
+    final candidates = <String>[];
+
+    if (_artistWikipediaPageTitles.containsKey(cacheKey)) {
+      candidates.add(_artistWikipediaPageTitles[cacheKey]!);
+    }
+    for (final entry in _artistWikipediaPageTitles.entries) {
+      if (cacheKey.contains(entry.key) || entry.key.contains(cacheKey)) {
+        if (!candidates.contains(entry.value)) {
+          candidates.add(entry.value);
+        }
       }
     }
 
-    // 2. Fetch from Jamendo Artist API (Creative Commons Legal)
+    if (!candidates.contains(originalName)) {
+      candidates.add(originalName);
+    }
+
+    // Try direct Wikipedia pageimages for candidate page titles
+    for (final title in candidates) {
+      try {
+        final uri = Uri.parse(
+          'https://en.wikipedia.org/w/api.php?action=query&titles=${Uri.encodeComponent(title)}&prop=pageimages|description&format=json&pithumbsize=300',
+        );
+        dev.log('[ArtistAvatarService] [MediaWiki pageimages] Querying: "$title"...');
+        final res = await http.get(uri, headers: {
+          'User-Agent': _userAgent,
+          'Accept': 'application/json',
+        }).timeout(const Duration(seconds: 4));
+
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final pages = data['query']?['pages'] as Map<String, dynamic>?;
+          if (pages != null && pages.isNotEmpty) {
+            final page = pages.values.first;
+            final desc = (page['description'] as String? ?? '').toLowerCase();
+            final thumb = page['thumbnail']?['source'] as String?;
+
+            if (thumb != null && thumb.isNotEmpty) {
+              final isMusician = _isMusicianDescription(desc);
+              if (isMusician || _artistWikipediaPageTitles.containsValue(title)) {
+                // Validate thumbnail accessibility
+                final valid = await validateImageUrl(thumb);
+                if (valid) {
+                  dev.log('[ArtistAvatarService] MediaWiki pageimages matched: "$title" ($desc)');
+                  return thumb;
+                }
+              } else {
+                dev.log('[ArtistAvatarService] Filtered non-musician title: "$title" description: "$desc"');
+              }
+            }
+          }
+        }
+      } catch (e) {
+        dev.log('[ArtistAvatarService] Error querying Wikipedia for "$title": $e');
+      }
+    }
+
+    // 2. Query Wikidata API (search entities -> P18 image claim with P106 occupation verification)
     try {
-      final jamendoUrl = Uri.parse(
-        'https://api.jamendo.com/v3.0/artists/?client_id=56d30c95&format=json&namesearch=${Uri.encodeComponent(artistName)}&limit=1',
+      final searchTarget = candidates.first;
+      final wikidataSearchUri = Uri.parse(
+        'https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${Uri.encodeComponent(searchTarget)}&language=en&format=json&limit=3',
       );
-      final res = await http.get(jamendoUrl).timeout(const Duration(seconds: 3));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final results = data['results'] as List?;
-        if (results != null && results.isNotEmpty) {
-          final img = (results.first['image'] as String? ?? '').trim();
-          if (img.isNotEmpty) {
-            _memoryAvatarCache[key] = img;
-            _persistCache();
-            return img;
+      dev.log('[ArtistAvatarService] [Wikidata] Searching entities for "$searchTarget"...');
+      final searchRes = await http.get(wikidataSearchUri, headers: {
+        'User-Agent': _userAgent,
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 4));
+
+      if (searchRes.statusCode == 200) {
+        final sData = jsonDecode(searchRes.body);
+        final results = sData['search'] as List?;
+        if (results != null) {
+          for (final item in results) {
+            final entityId = item['id'] as String?;
+            final desc = (item['description'] as String? ?? '').toLowerCase();
+            if (entityId == null) continue;
+
+            if (_isMusicianDescription(desc)) {
+              dev.log('[ArtistAvatarService] [Wikidata] Found musician entity $entityId ($desc). Fetching claims...');
+              final entityUri = Uri.parse(
+                'https://www.wikidata.org/w/api.php?action=wbgetentities&ids=$entityId&props=claims&format=json',
+              );
+              final entityRes = await http.get(entityUri, headers: {
+                'User-Agent': _userAgent,
+                'Accept': 'application/json',
+              }).timeout(const Duration(seconds: 4));
+
+              if (entityRes.statusCode == 200) {
+                final eData = jsonDecode(entityRes.body);
+                final claims = eData['entities']?[entityId]?['claims'] as Map<String, dynamic>?;
+                final p18List = claims?['P18'] as List?;
+                if (p18List != null && p18List.isNotEmpty) {
+                  final fileName = p18List[0]?['mainsnak']?['datavalue']?['value'] as String?;
+                  if (fileName != null && fileName.isNotEmpty) {
+                    final commonsUrl = 'https://commons.wikimedia.org/wiki/Special:FilePath/${Uri.encodeComponent(fileName)}?width=300';
+                    final valid = await validateImageUrl(commonsUrl);
+                    if (valid) {
+                      dev.log('[ArtistAvatarService] Wikidata P18 image validated: $commonsUrl');
+                      return commonsUrl;
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
-    } catch (_) {}
-
-    // 3. Fallback to Wikimedia Commons API (Public Domain / CC-BY-SA)
-    try {
-      final wikiUrl = Uri.parse(
-        'https://en.wikipedia.org/w/api.php?action=query&titles=${Uri.encodeComponent(artistName)}&prop=pageimages&format=json&pithumbsize=256',
-      );
-      final res = await http.get(wikiUrl, headers: {
-        'User-Agent': 'SkyTuneMusicPlayer/1.0 (legal open-source music player)',
-      }).timeout(const Duration(seconds: 3));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final pages = data['query']?['pages'] as Map<String, dynamic>?;
-        if (pages != null && pages.isNotEmpty) {
-          final firstPage = pages.values.first;
-          final source = firstPage['thumbnail']?['source'] as String?;
-          if (source != null && source.isNotEmpty) {
-            _memoryAvatarCache[key] = source;
-            _persistCache();
-            return source;
-          }
-        }
-      }
-    } catch (_) {}
+    } catch (e) {
+      dev.log('[ArtistAvatarService] Wikidata lookup failed for "$originalName": $e');
+    }
 
     return null;
+  }
+
+  static bool _isMusicianDescription(String desc) {
+    if (desc.isEmpty) return false;
+    const keywords = [
+      'musician', 'singer', 'composer', 'playback', 'music', 'songwriter', 'artist',
+      'soundtrack', 'director', 'band', 'producer', 'vocalist'
+    ];
+    return keywords.any((k) => desc.contains(k));
   }
 }

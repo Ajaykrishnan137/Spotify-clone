@@ -11,18 +11,16 @@ class LegalSearchEngineService {
   static final Map<String, List<SongModel>> _cache = {};
   static final Map<String, DateTime> _cacheTimestamp = {};
 
-  /// Normalizes text using FuzzyMatcher
   static String normalize(String input) {
     return FuzzyMatcher.normalize(input);
   }
 
-  /// Calculates a fuzzy similarity score between query and target (0.0 to 1.0)
   static double similarityScore(String queryNorm, String targetNorm) {
     return FuzzyMatcher.computeCombinedFuzzyScore(queryNorm, targetNorm);
   }
 
   /// Searches all legal sources in parallel, returning one continuous list of matching SongModels.
-  /// Matches the query against song title, artist, album/movie name, and playlist/genre name.
+  /// If strict artist intent is detected, only returns songs where the artist/composer field matches.
   static Future<List<SongModel>> searchAllSources({
     required String query,
     required List<SongModel> localCatalog,
@@ -45,7 +43,67 @@ class LegalSearchEngineService {
     final intent = QueryIntentEngine.analyzeQuery(cleanQuery);
     final queryNorm = FuzzyMatcher.normalize(cleanQuery);
 
-    // Expand search keywords if mood/genre intent exists
+    // -------------------------------------------------------------
+    // STRICT ARTIST MODE
+    // -------------------------------------------------------------
+    if (intent.type == QueryIntentType.artistStrictQuery) {
+      final canonicalArtist = intent.matchedArtistName!;
+      final canonicalNorm = FuzzyMatcher.normalize(canonicalArtist);
+
+      // Search local and online sources specifically for the canonical artist name
+      final results = await Future.wait([
+        _searchLocalArtistStrict(localCatalog, canonicalNorm),
+        OnlineMusicSearchService.searchOnline(canonicalArtist, limit: 40),
+        _searchInternetArchive(canonicalArtist, intent),
+      ]);
+
+      final List<SongModel> localSongs = results[0];
+      final List<SongModel> onlineSongs = results[1];
+      final List<SongModel> archiveSongs = results[2];
+
+      final rawMerged = [...localSongs, ...onlineSongs, ...archiveSongs];
+
+      // Strict filter: song.artist MUST match canonical artist (exact or fuzzy score >= 0.85)
+      final List<SongModel> artistOnlySongs = rawMerged.where((s) {
+        return _matchesArtistStrict(s.artist, canonicalNorm);
+      }).toList();
+
+      // Deduplicate by normalized Title + Artist
+      final Map<String, SongModel> dedup = {};
+      for (final song in artistOnlySongs) {
+        final key = '${FuzzyMatcher.normalize(song.title)}|||${FuzzyMatcher.normalize(song.artist)}';
+        if (!dedup.containsKey(key)) {
+          dedup[key] = song;
+        }
+      }
+
+      var merged = dedup.values.toList();
+
+      // Sort by popularity first, with release recency secondary
+      merged.sort((a, b) {
+        return b.popularity.compareTo(a.popularity);
+      });
+
+      // Filter by source / quality if user selected
+      if (sourceFilter != null && sourceFilter.isNotEmpty && sourceFilter != 'All') {
+        merged = merged.where((s) => (s.source ?? '').toLowerCase().contains(sourceFilter.toLowerCase())).toList();
+      }
+      if (qualityFilter != null && qualityFilter.isNotEmpty && qualityFilter != 'All') {
+        if (qualityFilter == 'Lossless') {
+          merged = merged.where((s) => s.storagePath.endsWith('.flac')).toList();
+        } else if (qualityFilter == 'High (320kbps)') {
+          merged = merged.where((s) => !s.storagePath.endsWith('_96.mp4')).toList();
+        }
+      }
+
+      _cache[cacheKey] = merged;
+      _cacheTimestamp[cacheKey] = DateTime.now();
+      return merged;
+    }
+
+    // -------------------------------------------------------------
+    // GENERAL / PLAYLIST / MOOD MODE
+    // -------------------------------------------------------------
     String effectiveSearchTerm = cleanQuery;
     if (intent.type == QueryIntentType.playlistType && intent.tags.isNotEmpty) {
       if (cleanQuery.toLowerCase().contains('tamil')) {
@@ -55,7 +113,6 @@ class LegalSearchEngineService {
       }
     }
 
-    // 2. Query all legal sources in parallel
     final results = await Future.wait([
       _searchLocal(localCatalog, cleanQuery, intent),
       _searchJamendo(cleanQuery, intent),
@@ -73,7 +130,6 @@ class LegalSearchEngineService {
     final List<SongModel> licensedOnline = results[3];
     final List<SongModel> moodOnline = results[4];
 
-    // 3. Merge all sources
     final List<SongModel> rawMerged = [
       ...localSongs,
       ...licensedOnline,
@@ -82,7 +138,6 @@ class LegalSearchEngineService {
       ...archiveSongs,
     ];
 
-    // 4. Deduplicate by normalized Title + Artist
     final Map<String, SongModel> dedup = {};
     for (final song in rawMerged) {
       final key = '${FuzzyMatcher.normalize(song.title)}|||${FuzzyMatcher.normalize(song.artist)}';
@@ -93,14 +148,12 @@ class LegalSearchEngineService {
 
     var merged = dedup.values.toList();
 
-    // 5. Rank by a combined score: exact match, prefix match, fuzzy similarity, popularity, recency, source quality
     merged.sort((a, b) {
       final scoreA = _calculateRankingScore(a, cleanQuery, queryNorm, intent);
       final scoreB = _calculateRankingScore(b, cleanQuery, queryNorm, intent);
       return scoreB.compareTo(scoreA);
     });
 
-    // 6. Apply user filters (source, quality, language)
     if (sourceFilter != null && sourceFilter.isNotEmpty && sourceFilter != 'All') {
       merged = merged.where((s) {
         final g = s.genre.toLowerCase();
@@ -122,7 +175,38 @@ class LegalSearchEngineService {
     return merged;
   }
 
-  /// Calculates combined ranking score for a song
+  /// Strict artist matching check: matches individual artist segments (split by /, ,, &, feat, with, and)
+  /// Requires exact match, alias match, or high-threshold fuzzy match (>= 0.85).
+  /// Never matches title, album, tags, or loosely similar artists.
+  static bool _matchesArtistStrict(String songArtist, String canonicalArtistNorm) {
+    final norm = FuzzyMatcher.normalize(songArtist);
+    if (norm == canonicalArtistNorm) return true;
+
+    // Split multi-artist and collaboration strings
+    final parts = songArtist.split(RegExp(r'[/,&+]|\bfeat\b|\bwith\b|\band\b', caseSensitive: false));
+    for (final part in parts) {
+      final pNorm = FuzzyMatcher.normalize(part);
+      if (pNorm.isEmpty) continue;
+      if (pNorm == canonicalArtistNorm) return true;
+
+      // Check alias dictionary
+      final aliasMatch = QueryIntentEngine.matchArtistQuery(pNorm);
+      if (aliasMatch != null && FuzzyMatcher.normalize(aliasMatch) == canonicalArtistNorm) {
+        return true;
+      }
+
+      final sim = FuzzyMatcher.computeCombinedFuzzyScore(pNorm, canonicalArtistNorm);
+      if (sim >= 0.85) return true;
+    }
+    return false;
+  }
+
+  static Future<List<SongModel>> _searchLocalArtistStrict(List<SongModel> catalog, String canonicalNorm) async {
+    return catalog.where((s) {
+      return _matchesArtistStrict(s.artist, canonicalNorm);
+    }).map((s) => s.copyWith(source: 'Local Storage')).toList();
+  }
+
   static double _calculateRankingScore(SongModel song, String rawQuery, String queryNorm, QueryIntentResult intent) {
     final titleNorm = FuzzyMatcher.normalize(song.title);
     final artistNorm = FuzzyMatcher.normalize(song.artist);
@@ -132,7 +216,6 @@ class LegalSearchEngineService {
 
     double relevanceScore = 0.0;
 
-    // Exact match bonus
     if (titleNorm == queryNorm || combinedNorm.contains(queryNorm)) {
       relevanceScore += 1.0;
     } else if (titleNorm.startsWith(queryNorm)) {
@@ -141,7 +224,6 @@ class LegalSearchEngineService {
       relevanceScore += FuzzyMatcher.computeCombinedFuzzyScore(rawQuery, combinedNorm);
     }
 
-    // Mood / Tag match bonus for playlist intent
     if (intent.type == QueryIntentType.playlistType) {
       for (final tag in intent.tags) {
         final tagNorm = FuzzyMatcher.normalize(tag);
@@ -157,21 +239,19 @@ class LegalSearchEngineService {
       }
     }
 
-    // Popularity score (0.0 to 0.4)
     double popularityBonus = 0.0;
     if (song.popularity > 0) {
       popularityBonus = (song.popularity / 500000.0).clamp(0.0, 0.4);
     }
 
-    // Recency score (0.0 to 0.5)
     double recencyBonus = 0.0;
     if (song.releaseDate != null && song.releaseDate!.isNotEmpty) {
       final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(song.releaseDate!);
       if (yearMatch != null) {
         final year = int.tryParse(yearMatch.group(1)!) ?? 0;
-        final currentYear = DateTime.now().year; // 2026
+        final currentYear = DateTime.now().year;
         if (year >= currentYear - 1) {
-          recencyBonus = 0.5; // Last 12-24 months
+          recencyBonus = 0.5;
         } else if (year >= currentYear - 3) {
           recencyBonus = 0.3;
         } else if (year >= currentYear - 5) {
@@ -180,7 +260,6 @@ class LegalSearchEngineService {
       }
     }
 
-    // If query explicitly demands latest / trending, heavily weigh recency & popularity
     if (intent.sortMode == 'latest') {
       return (recencyBonus * 2.0) + (relevanceScore * 0.5) + (popularityBonus * 0.3);
     } else if (intent.sortMode == 'trending') {
@@ -192,7 +271,6 @@ class LegalSearchEngineService {
     return relevanceScore + (popularityBonus * 0.2) + (recencyBonus * 0.2);
   }
 
-  // Source 1: Local library search (offline guaranteed, matches song title, artist, album/movie, playlist/genre)
   static Future<List<SongModel>> _searchLocal(List<SongModel> catalog, String rawQuery, QueryIntentResult intent) async {
     final queryNorm = FuzzyMatcher.normalize(rawQuery);
 
@@ -204,7 +282,6 @@ class LegalSearchEngineService {
         return true;
       }
 
-      // Check intent tags
       if (intent.type == QueryIntentType.playlistType) {
         final cNorm = FuzzyMatcher.normalize(combined);
         for (final tag in intent.tags) {
@@ -219,7 +296,6 @@ class LegalSearchEngineService {
     }).map((s) => s.copyWith(source: 'Local Storage')).toList();
   }
 
-  // Source 2: Jamendo Free Music API (Legal Creative Commons / Free Music)
   static Future<List<SongModel>> _searchJamendo(String query, QueryIntentResult intent) async {
     try {
       String searchParam = 'namesearch=${Uri.encodeComponent(query)}';
@@ -269,7 +345,6 @@ class LegalSearchEngineService {
     }
   }
 
-  // Source 3: Internet Archive Live Music & Audio (Public Domain / Legal Archive)
   static Future<List<SongModel>> _searchInternetArchive(String query, QueryIntentResult intent) async {
     try {
       String queryEncoded = Uri.encodeComponent('$query AND mediatype:(audio)');

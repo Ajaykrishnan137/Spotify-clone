@@ -14,6 +14,7 @@ import '../../core/services/query_intent_engine.dart';
 import '../../core/services/fuzzy_matcher.dart';
 import '../playlist/playlist_detail_view.dart';
 import 'generated_playlist_card.dart';
+import 'artist_header_card.dart';
 
 class SearchView extends ConsumerStatefulWidget {
   const SearchView({super.key});
@@ -31,26 +32,27 @@ class _SearchViewState extends ConsumerState<SearchView> {
   List<SongModel> _searchResult = [];
   String _selectedSourceFilter = 'All';
   String _selectedQualityFilter = 'All';
+  String _artistSortOrder = 'Popularity'; // 'Popularity' or 'Newest first'
   QueryIntentResult? _currentIntent;
   String? _spellingSuggestion;
   List<String> _autocompleteSuggestions = [];
 
   final List<String> _recentSearches = [
+    'Harris Jayaraj',
     'Tamil new songs',
     'Travelling songs',
     'Sleep songs',
-    'With Love',
     'Pradeep Kumar',
     'Sid Sriram',
   ];
 
   static const List<Map<String, dynamic>> _browseGenres = [
-    {'title': 'Pop & Melody', 'color': Color(0xFFE91E63), 'icon': Icons.music_note},
-    {'title': 'Tamil Hits', 'color': Color(0xFFFF5722), 'icon': Icons.audiotrack},
-    {'title': 'Malayalam Hits', 'color': Color(0xFF00B0FF), 'icon': Icons.waves},
-    {'title': 'Acoustic / Indie', 'color': Color(0xFF8E24AA), 'icon': Icons.mic},
-    {'title': 'Chill & Focus', 'color': Color(0xFF00897B), 'icon': Icons.spa},
-    {'title': 'Dance / Party', 'color': Color(0xFFFF8F00), 'icon': Icons.celebration},
+    {'title': 'Pop & Melody', 'color': Color(0xFF232D42), 'icon': Icons.music_note},
+    {'title': 'Tamil Hits', 'color': Color(0xFF382928), 'icon': Icons.audiotrack},
+    {'title': 'Malayalam Hits', 'color': Color(0xFF1E2E38), 'icon': Icons.waves},
+    {'title': 'Acoustic / Indie', 'color': Color(0xFF312638), 'icon': Icons.mic},
+    {'title': 'Chill & Focus', 'color': Color(0xFF1E332E), 'icon': Icons.spa},
+    {'title': 'Dance / Party', 'color': Color(0xFF383120), 'icon': Icons.celebration},
   ];
 
   @override
@@ -63,7 +65,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    // Fast autocomplete updates
     _updateAutocomplete(query);
 
     _debounce = Timer(const Duration(milliseconds: 300), () {
@@ -81,6 +82,13 @@ class _SearchViewState extends ConsumerState<SearchView> {
     }
 
     const standardSuggestions = [
+      'Harris Jayaraj',
+      'Haris Jeyaraj',
+      'Pradeep Kumar',
+      'Sid Sriram',
+      'Sai Abhyankkar',
+      'Anirudh Ravichander',
+      'A. R. Rahman',
       'Tamil new songs',
       'Tamil trending songs',
       'Travelling songs',
@@ -89,13 +97,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
       'Romantic songs',
       'Chill vibes',
       '90s tamil hits',
-      'Sid Sriram hits',
-      'Pradeep Kumar melody',
-      'Harris Jayaraj hits',
-      'With Love songs',
-      'Lana Del Rey acoustic',
-      'Acoustic guitar melodies',
-      'Focus study beats',
     ];
 
     final matches = standardSuggestions.where((s) {
@@ -121,7 +122,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
       return;
     }
 
-    // Intent detection
     final intent = QueryIntentEngine.analyzeQuery(cleanQuery);
 
     setState(() {
@@ -131,7 +131,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
     final catalog = await ref.read(cloudCatalogServiceProvider).getCatalog();
 
-    // Check spelling suggestions from catalog titles and artists
     final candidatePool = catalog.map((s) => s.title).followedBy(catalog.map((s) => s.artist));
     final suggestion = FuzzyMatcher.findSpellingSuggestion(cleanQuery, candidatePool);
 
@@ -142,14 +141,31 @@ class _SearchViewState extends ConsumerState<SearchView> {
       qualityFilter: _selectedQualityFilter != 'All' ? _selectedQualityFilter : null,
     );
 
-    // Cancel outdated requests so results never flicker or show stale data
     if (!mounted || requestId != _searchRequestId) return;
 
+    // Apply artist sort order if in strict artist mode
+    List<SongModel> finalResults = List<SongModel>.from(result);
+    if (intent.type == QueryIntentType.artistStrictQuery) {
+      _applyArtistSort(finalResults);
+    }
+
     setState(() {
-      _searchResult = result;
+      _searchResult = finalResults;
       _isLoading = false;
       _spellingSuggestion = suggestion;
     });
+  }
+
+  void _applyArtistSort(List<SongModel> list) {
+    if (_artistSortOrder == 'Newest first') {
+      list.sort((a, b) {
+        final ya = int.tryParse(a.releaseDate ?? '0') ?? 0;
+        final yb = int.tryParse(b.releaseDate ?? '0') ?? 0;
+        return yb.compareTo(ya);
+      });
+    } else {
+      list.sort((a, b) => b.popularity.compareTo(a.popularity));
+    }
   }
 
   void _onSearchSubmitted(String query) {
@@ -177,18 +193,18 @@ class _SearchViewState extends ConsumerState<SearchView> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved "$playlistTitle" to your library!'),
-          backgroundColor: AppColors.cyanAccent,
+          content: Text('Saved "$playlistTitle" to your library'),
+          backgroundColor: AppColors.primarySkyBlue,
           action: SnackBarAction(
             label: 'View',
-            textColor: Colors.black,
+            textColor: Colors.white,
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => PlaylistDetailView(
                     title: playlistTitle,
-                    subtitle: 'Saved Auto-Generated Playlist',
+                    subtitle: 'Saved Playlist',
                     songs: _searchResult,
                   ),
                 ),
@@ -208,39 +224,47 @@ class _SearchViewState extends ConsumerState<SearchView> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Downloading ${_searchResult.length} legal tracks for offline play...'),
-        backgroundColor: AppColors.cyanAccent,
+        content: Text('Downloading ${_searchResult.length} legal tracks...'),
+        backgroundColor: AppColors.primarySkyBlue,
       ),
     );
   }
 
   Widget _buildSearchResults(AudioPlayerController playerController, PlayerStateData playerState) {
     if (_searchResult.isEmpty && !_isLoading) {
+      final isArtistQuery = _currentIntent?.type == QueryIntentType.artistStrictQuery;
+      final artistName = _currentIntent?.matchedArtistName ?? _searchController.text;
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.search_off_rounded, size: 54, color: AppColors.textSecondary),
+              const Icon(Icons.search_off_rounded, size: 48, color: AppColors.textSecondary),
               const SizedBox(height: 12),
-              const Text(
-                'No songs found, try another spelling',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                isArtistQuery
+                    ? 'No songs by $artistName found in free sources'
+                    : 'No songs found, try another spelling',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
-              const Text(
-                'SkyTune searches across all legal sources (Local files, Jamendo, Free Music Archive, Internet Archive).\nTry checking for typos or searching by mood, artist, or movie.',
+              Text(
+                isArtistQuery
+                    ? 'SkyTune strictly uses legal, licensed, and open sources. Songs not available from these sources cannot be streamed.'
+                    : 'SkyTune searches across all legal sources (Local files, Jamendo, Free Music Archive, Internet Archive).\nTry checking for typos or searching by artist or movie.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               if (_spellingSuggestion != null) ...[
                 const SizedBox(height: 14),
                 ActionChip(
                   backgroundColor: AppColors.card,
-                  avatar: const Icon(Icons.auto_fix_high, size: 16, color: AppColors.cyanAccent),
+                  avatar: const Icon(Icons.search, size: 16, color: AppColors.primarySkyBlue),
                   label: Text('Did you mean "${_spellingSuggestion}"?',
-                      style: const TextStyle(color: AppColors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(color: AppColors.primarySkyBlue, fontSize: 13, fontWeight: FontWeight.bold)),
                   onPressed: () {
                     _searchController.text = _spellingSuggestion!;
                     _performSearch(_spellingSuggestion!);
@@ -250,10 +274,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
-                children: ['Travelling songs', 'Tamil new songs', 'Sleep songs', 'With Love', 'Chill'].map((hint) {
+                children: ['Harris Jayaraj', 'Pradeep Kumar', 'Travelling songs', 'Tamil new songs', 'Sleep songs'].map((hint) {
                   return ActionChip(
                     backgroundColor: AppColors.card,
-                    label: Text('Try "$hint"', style: const TextStyle(color: AppColors.cyanAccent, fontSize: 12)),
+                    label: Text(hint, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)),
                     onPressed: () {
                       _searchController.text = hint;
                       _performSearch(hint);
@@ -267,22 +291,117 @@ class _SearchViewState extends ConsumerState<SearchView> {
       );
     }
 
-    final bool isPlaylistQuery = _currentIntent != null && _currentIntent!.type == QueryIntentType.playlistType;
+    final isArtistStrict = _currentIntent?.type == QueryIntentType.artistStrictQuery;
+    final isPlaylistQuery = _currentIntent != null && _currentIntent!.type == QueryIntentType.playlistType;
     final relatedList = _currentIntent?.relatedPlaylists ?? [];
+
+    int extraItemCount = 0;
+    if (isArtistStrict) {
+      extraItemCount = 1; // ArtistHeaderCard
+    } else if (isPlaylistQuery) {
+      extraItemCount = 1 + (relatedList.isNotEmpty ? 1 : 0);
+    }
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _searchResult.length + (isPlaylistQuery ? 1 : 0) + (isPlaylistQuery && relatedList.isNotEmpty ? 1 : 0),
+      itemCount: _searchResult.length + extraItemCount,
       padding: const EdgeInsets.only(bottom: Dimensions.miniPlayerHeight + Dimensions.space64),
       itemBuilder: (context, index) {
-        // 1. Auto-generated playlist card at the very top for playlist-type queries
+        // Strict Artist Header
+        if (isArtistStrict && index == 0) {
+          final artistName = _currentIntent!.matchedArtistName!;
+          return Column(
+            children: [
+              ArtistHeaderCard(
+                artistName: artistName,
+                songCount: _searchResult.length,
+                onPlay: () {
+                  _onSearchSubmitted(_searchController.text);
+                  playerController.playSong(_searchResult.first, queue: _searchResult, index: 0);
+                },
+                onShuffle: () {
+                  _onSearchSubmitted(_searchController.text);
+                  final shuffled = List<SongModel>.from(_searchResult)..shuffle();
+                  playerController.playSong(shuffled.first, queue: shuffled, index: 0);
+                },
+              ),
+              // Sort Option Row & Free Sources Notice
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_searchResult.length <= 10)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.dividers),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, size: 14, color: AppColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Only ${_searchResult.length} songs by this artist are available from free sources.',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Text(
+                          '${_searchResult.length} songs by $artistName',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.dividers),
+                          ),
+                          child: DropdownButton<String>(
+                            value: _artistSortOrder,
+                            underline: const SizedBox.shrink(),
+                            dropdownColor: AppColors.surface,
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                            items: ['Popularity', 'Newest first'].map((s) {
+                              return DropdownMenuItem(value: s, child: Text(s));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _artistSortOrder = val;
+                                  _applyArtistSort(_searchResult);
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+          );
+        }
+
+        // Generated Playlist Card
         if (isPlaylistQuery && index == 0) {
           return GeneratedPlaylistCard(
             title: _currentIntent!.title,
             songs: _searchResult,
             onPlay: () {
               _onSearchSubmitted(_searchController.text);
-              // Tapping Play sets whole list as queue with Repeat All
               playerController.setLoopMode(PlayerLoopMode.all);
               playerController.playSong(_searchResult.first, queue: _searchResult, index: 0);
             },
@@ -297,10 +416,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
           );
         }
 
-        // 2. Optional compact horizontal row of "Related playlists" under the main card
+        // Related Playlists
         if (isPlaylistQuery && relatedList.isNotEmpty && index == 1) {
           return Container(
-            height: 38,
+            height: 36,
             margin: const EdgeInsets.only(bottom: 12, left: Dimensions.space16, right: Dimensions.space16),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -309,8 +428,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
               itemBuilder: (ctx, rIdx) {
                 final relTitle = relatedList[rIdx];
                 return ActionChip(
-                  backgroundColor: AppColors.card,
-                  avatar: const Icon(Icons.playlist_play, size: 16, color: AppColors.cyanAccent),
+                  backgroundColor: AppColors.surface,
                   label: Text(relTitle, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)),
                   onPressed: () {
                     _searchController.text = relTitle;
@@ -322,8 +440,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
           );
         }
 
-        // 3. Continuous list of matching songs
-        final songIndex = isPlaylistQuery ? (relatedList.isNotEmpty ? index - 2 : index - 1) : index;
+        final songIndex = index - extraItemCount;
         final song = _searchResult[songIndex];
 
         return SongTile(
@@ -343,7 +460,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
   Widget build(BuildContext context) {
     final playerController = ref.read(audioPlayerControllerProvider.notifier);
     final playerState = ref.watch(audioPlayerControllerProvider);
-    final allSongsAsync = ref.watch(allSongsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -352,7 +468,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Fixed Top Header: Search Title & Input
+            // Top Header: Title & Search Field
             Container(
               color: AppColors.background,
               padding: const EdgeInsets.fromLTRB(Dimensions.space16, Dimensions.space12, Dimensions.space16, Dimensions.space8),
@@ -362,13 +478,12 @@ class _SearchViewState extends ConsumerState<SearchView> {
                   const Text(
                     'Search',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Search Input with 300ms debounced search-as-you-type
                   TextField(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
@@ -376,16 +491,16 @@ class _SearchViewState extends ConsumerState<SearchView> {
                       _onSearchSubmitted(val);
                       _performSearch(val);
                     },
-                    style: const TextStyle(color: Colors.black),
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white,
-                      hintText: 'Search songs, moods, travel, sleep, artists...',
-                      hintStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
-                      prefixIcon: const Icon(Icons.search, color: Colors.black),
+                      fillColor: AppColors.surface,
+                      hintText: 'Search songs, artists, moods...',
+                      hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.black),
+                              icon: const Icon(Icons.clear, color: AppColors.textSecondary),
                               onPressed: () {
                                 _searchController.clear();
                                 _onSearchChanged('');
@@ -394,8 +509,16 @@ class _SearchViewState extends ConsumerState<SearchView> {
                           : null,
                       contentPadding: const EdgeInsets.symmetric(vertical: Dimensions.space12),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.dividers),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.dividers),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.primarySkyBlue),
                       ),
                     ),
                   ),
@@ -403,7 +526,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
               ),
             ),
 
-            // Autocomplete suggestions popup bar
+            // Autocomplete bar
             if (_autocompleteSuggestions.isNotEmpty && _searchController.text.isNotEmpty)
               Container(
                 color: AppColors.surface,
@@ -421,9 +544,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
                             _onSearchSubmitted(sug);
                           },
                           child: Chip(
-                            backgroundColor: AppColors.card,
-                            label: Text(sug, style: const TextStyle(color: AppColors.cyanAccent, fontSize: 12)),
-                            avatar: const Icon(Icons.search, size: 14, color: AppColors.cyanAccent),
+                            backgroundColor: AppColors.elevated,
+                            label: Text(sug, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)),
+                            avatar: const Icon(Icons.search, size: 14, color: AppColors.textSecondary),
                           ),
                         ),
                       );
@@ -432,133 +555,35 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ),
               ),
 
-            // Filter Chips (Legal Sources & Quality)
-            if (_searchController.text.isNotEmpty)
-              Container(
-                color: AppColors.background,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 4),
-                  child: Row(
-                    children: [
-                      // Source filter dropdown
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _selectedSourceFilter,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.card,
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                          icon: const Icon(Icons.filter_list, size: 16, color: AppColors.cyanAccent),
-                          items: ['All', 'Local', 'Jamendo', 'Archive', 'Release'].map((src) {
-                            return DropdownMenuItem(value: src, child: Text('Source: $src'));
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedSourceFilter = val);
-                              _performSearch(_searchController.text);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Quality filter dropdown
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _selectedQualityFilter,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.card,
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                          icon: const Icon(Icons.high_quality, size: 16, color: AppColors.cyanAccent),
-                          items: ['All', 'High (320kbps)', 'Lossless'].map((q) {
-                            return DropdownMenuItem(value: q, child: Text('Quality: $q'));
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedQualityFilter = val);
-                              _performSearch(_searchController.text);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // Live Results Count Header & "Did you mean..." banner
+            // Total Count Header
             if (_searchController.text.isNotEmpty)
               Container(
                 color: AppColors.background,
                 padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          _searchResult.isEmpty && !_isLoading
-                              ? '0 songs found'
-                              : (_searchResult.length < 20 && _currentIntent?.type == QueryIntentType.playlistType && !_isLoading)
-                                  ? 'Only ${_searchResult.length} free songs found for this mood'
-                                  : '${_searchResult.length} ${_searchResult.length == 1 ? 'song found' : 'songs found'}',
-                          style: TextStyle(
-                            color: (_searchResult.length < 20 && _currentIntent?.type == QueryIntentType.playlistType && !_isLoading)
-                                ? const Color(0xFFFFC107)
-                                : AppColors.cyanAccent,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_isLoading)
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyanAccent),
-                          ),
-                      ],
-                    ),
-                    if (_spellingSuggestion != null && _searchResult.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      InkWell(
-                        onTap: () {
-                          _searchController.text = _spellingSuggestion!;
-                          _performSearch(_spellingSuggestion!);
-                        },
-                        child: Text(
-                          'Did you mean: "${_spellingSuggestion}"?',
-                          style: const TextStyle(
-                            color: Color(0xFF38D6FF),
-                            fontSize: 12.5,
-                            fontStyle: FontStyle.italic,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
+                    Text(
+                      _currentIntent?.type == QueryIntentType.artistStrictQuery
+                          ? '${_searchResult.length} songs by ${_currentIntent!.matchedArtistName}'
+                          : '${_searchResult.length} ${_searchResult.length == 1 ? 'song found' : 'songs found'}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
+                    ),
+                    const Spacer(),
+                    if (_isLoading)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primarySkyBlue),
+                      ),
                   ],
                 ),
               ),
 
-            if (_isLoading && _searchResult.isEmpty)
-              const LinearProgressIndicator(
-                backgroundColor: AppColors.surface,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyanAccent),
-                minHeight: 2.5,
-              ),
-
-            // Scrollable Content
+            // Main Content
             Expanded(
               child: _searchController.text.isEmpty
                   ? ListView(
@@ -569,13 +594,12 @@ class _SearchViewState extends ConsumerState<SearchView> {
                         bottom: Dimensions.miniPlayerHeight + Dimensions.space64,
                       ),
                       children: [
-                        // Recent Searches
                         if (_recentSearches.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           const Text(
                             'Recent searches',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
@@ -586,9 +610,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
                             runSpacing: 8,
                             children: _recentSearches.map((term) {
                               return ActionChip(
-                                backgroundColor: AppColors.card,
+                                backgroundColor: AppColors.surface,
                                 label: Text(term, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-                                avatar: const Icon(Icons.history, size: 16, color: AppColors.textSecondary),
+                                avatar: const Icon(Icons.history, size: 15, color: AppColors.textSecondary),
                                 onPressed: () {
                                   _searchController.text = term;
                                   _performSearch(term);
@@ -598,12 +622,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
                           ),
                           const SizedBox(height: 24),
                         ],
-
-                        // Genre / Mood Browse Tiles
                         const Text(
-                          'Browse legal catalogs',
+                          'Browse catalogs',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
                           ),
@@ -615,14 +637,14 @@ class _SearchViewState extends ConsumerState<SearchView> {
                           itemCount: _browseGenres.length,
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1.6,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.8,
                           ),
                           itemBuilder: (context, index) {
                             final item = _browseGenres[index];
                             return InkWell(
-                              borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
+                              borderRadius: BorderRadius.circular(10),
                               onTap: () {
                                 final title = item['title'] as String;
                                 _searchController.text = title;
@@ -631,39 +653,17 @@ class _SearchViewState extends ConsumerState<SearchView> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: item['color'] as Color,
-                                  borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (item['color'] as Color).withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.dividers),
                                 ),
                                 padding: const EdgeInsets.all(Dimensions.space12),
-                                child: Stack(
-                                  children: [
-                                    Text(
-                                      item['title'] as String,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Positioned(
-                                      bottom: 0,
-                                      right: 0,
-                                      child: Transform.rotate(
-                                        angle: 0.3,
-                                        child: Icon(
-                                          item['icon'] as IconData,
-                                          size: 40,
-                                          color: Colors.white.withOpacity(0.4),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  item['title'] as String,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             );

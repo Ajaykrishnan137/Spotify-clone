@@ -16,7 +16,7 @@ class ArtistAvatar extends StatefulWidget {
     required this.artistName,
     this.avatarUrl,
     this.size = 76.0,
-    this.borderWidth = 1.5,
+    this.borderWidth = 1.0,
     this.borderColor,
     this.onTap,
   });
@@ -33,9 +33,7 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
   void initState() {
     super.initState();
     _resolvedUrl = widget.avatarUrl;
-    if (_resolvedUrl == null || _resolvedUrl!.isEmpty) {
-      _resolveAvatar();
-    }
+    _resolveAvatar();
   }
 
   @override
@@ -43,15 +41,16 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.artistName != widget.artistName || oldWidget.avatarUrl != widget.avatarUrl) {
       _resolvedUrl = widget.avatarUrl;
-      if (_resolvedUrl == null || _resolvedUrl!.isEmpty) {
-        _resolveAvatar();
-      }
+      _resolveAvatar();
     }
   }
 
   Future<void> _resolveAvatar() async {
     setState(() => _isLoading = true);
-    final url = await ArtistAvatarService.getArtistAvatarUrl(widget.artistName);
+    final url = await ArtistAvatarService.getArtistAvatarUrl(
+      widget.artistName,
+      sourceProvidedUrl: widget.avatarUrl,
+    );
     if (mounted) {
       setState(() {
         _resolvedUrl = url;
@@ -62,7 +61,7 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
 
   Widget _buildFallbackInitials() {
     final initials = ArtistAvatarService.getInitials(widget.artistName);
-    final gradient = ArtistAvatarService.getGradientForArtist(widget.artistName);
+    final solidColor = ArtistAvatarService.getColorForArtist(widget.artistName);
     final fontSize = (widget.size * 0.38).clamp(12.0, 36.0);
 
     return Container(
@@ -70,13 +69,13 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
       height: widget.size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: gradient,
+        color: solidColor,
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.textPrimary,
           fontSize: fontSize,
           fontWeight: FontWeight.bold,
           letterSpacing: 0.5,
@@ -95,11 +94,11 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
       ),
       child: const Center(
         child: SizedBox(
-          width: 18,
-          height: 18,
+          width: 16,
+          height: 16,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyanAccent),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primarySkyBlue),
           ),
         ),
       ),
@@ -108,7 +107,7 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveBorderColor = widget.borderColor ?? AppColors.cyanAccent.withOpacity(0.4);
+    final effectiveBorderColor = widget.borderColor ?? AppColors.dividers;
 
     Widget innerContent;
     if (_isLoading && (_resolvedUrl == null || _resolvedUrl!.isEmpty)) {
@@ -116,6 +115,9 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
     } else if (_resolvedUrl != null && _resolvedUrl!.isNotEmpty) {
       innerContent = CachedNetworkImage(
         imageUrl: _resolvedUrl!,
+        httpHeaders: const {
+          'User-Agent': 'SkyTuneMusicPlayer/1.0 (contact@skytune.app; legal music streaming)',
+        },
         width: widget.size,
         height: widget.size,
         fit: BoxFit.cover,
@@ -138,13 +140,6 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
         border: widget.borderWidth > 0
             ? Border.all(color: effectiveBorderColor, width: widget.borderWidth)
             : null,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cyanAccent.withOpacity(0.12),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: ClipOval(child: innerContent),
     );

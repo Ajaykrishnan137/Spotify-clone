@@ -192,9 +192,7 @@ class _ArtistDetailViewState extends ConsumerState<ArtistDetailView> {
                     AppImage(url: _resolvedAvatarUrl!, fit: BoxFit.cover, borderRadius: 0)
                   else
                     Container(
-                      decoration: BoxDecoration(
-                        gradient: ArtistAvatarService.getGradientForArtist(widget.artistName),
-                      ),
+                      color: ArtistAvatarService.getColorForArtist(widget.artistName),
                       child: Center(
                         child: Text(
                           ArtistAvatarService.getInitials(widget.artistName),

@@ -11,12 +11,12 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.deepNightBlue,
+      scaffoldBackgroundColor: AppColors.background,
       primaryColor: AppColors.primarySkyBlue,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.cyanAccent,
-        onPrimary: Colors.black,
-        secondary: AppColors.primarySkyBlue,
+        primary: AppColors.primarySkyBlue,
+        onPrimary: Colors.white,
+        secondary: AppColors.sunsetCoral,
         onSecondary: Colors.white,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,

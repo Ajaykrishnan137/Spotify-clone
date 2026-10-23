@@ -41,22 +41,9 @@ class MiniPlayer extends ConsumerWidget {
         height: Dimensions.miniPlayerHeight,
         margin: const EdgeInsets.symmetric(horizontal: Dimensions.space8, vertical: Dimensions.space4),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              themeColor.withOpacity(0.35),
-              AppColors.elevated,
-            ],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          borderRadius: BorderRadius.circular(Dimensions.radiusMedium),
-          boxShadow: [
-            BoxShadow(
-              color: themeColor.withOpacity(0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.elevated, width: 1),
         ),
         child: Column(
           children: [
@@ -89,7 +76,7 @@ class MiniPlayer extends ConsumerWidget {
                         Row(
                           children: [
                             if (playerState.isPlaying) ...[
-                              AnimatedEqualizerBars(color: themeColor, size: 12),
+                              AnimatedEqualizerBars(color: AppColors.accent, size: 12),
                               const SizedBox(width: 6),
                             ],
                             Expanded(
@@ -116,20 +103,9 @@ class MiniPlayer extends ConsumerWidget {
                       width: 38,
                       height: 38,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E90FF), Color(0xFF38D6FF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                      decoration: const BoxDecoration(
+                        color: AppColors.accent,
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF38D6FF).withOpacity(0.4),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ],
                       ),
                       child: Icon(
                         playerState.isPlaying ? Icons.pause : Icons.play_arrow,
@@ -150,8 +126,8 @@ class MiniPlayer extends ConsumerWidget {
             // Bottom mini progress bar
             LinearProgressIndicator(
               value: progress,
-              backgroundColor: AppColors.surface,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyanAccent),
+              backgroundColor: AppColors.elevated,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
               minHeight: 2.5,
             ),
           ],

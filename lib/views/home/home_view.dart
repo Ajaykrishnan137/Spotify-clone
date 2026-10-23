@@ -32,6 +32,9 @@ class HomeView extends ConsumerStatefulWidget {
 class _HomeViewState extends ConsumerState<HomeView> {
   List<SongModel> _trendingTamil = [];
   bool _isLoadingTrending = true;
+  bool _isRefreshing = false;
+  DateTime? _lastUpdated;
+  DateTime? _lastRefreshTap;
 
   @override
   void initState() {
@@ -39,22 +42,50 @@ class _HomeViewState extends ConsumerState<HomeView> {
     _loadTrendingTamil();
   }
 
-  Future<void> _loadTrendingTamil() async {
+  Future<void> _loadTrendingTamil({bool forceNextBatch = false}) async {
     try {
-      final songs = await HomeContentService.getTrendingTamilSongs();
+      final songs = await HomeContentService.getTrendingTamilSongs(
+        limit: 20,
+        forceNextBatch: forceNextBatch,
+      );
       if (mounted) {
         setState(() {
           _trendingTamil = songs;
           _isLoadingTrending = false;
+          _isRefreshing = false;
+          _lastUpdated = DateTime.now();
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
           _isLoadingTrending = false;
+          _isRefreshing = false;
         });
       }
     }
+  }
+
+  void _handleRefreshTap() {
+    final now = DateTime.now();
+    if (_lastRefreshTap != null &&
+        now.difference(_lastRefreshTap!).inMilliseconds < 2000) {
+      return; // 2s anti-spam lock
+    }
+    _lastRefreshTap = now;
+    setState(() {
+      _isRefreshing = true;
+    });
+    _loadTrendingTamil(forceNextBatch: true);
+  }
+
+  String _getUpdatedTimeText() {
+    if (_lastUpdated == null) return 'Updated just now';
+    final diff = DateTime.now().difference(_lastUpdated!);
+    if (diff.inSeconds < 60) return 'Updated just now';
+    if (diff.inMinutes < 60) return 'Updated ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Updated ${diff.inHours}h ago';
+    return 'Updated ${diff.inDays}d ago';
   }
 
   @override
@@ -106,7 +137,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: const BoxDecoration(
-                              color: AppColors.cyanAccent,
+                              color: AppColors.secondaryAccent,
                               shape: BoxShape.circle,
                             ),
                             constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
@@ -347,18 +378,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                         width: 140,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                          gradient: LinearGradient(
-                            colors: colors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colors.first.withOpacity(0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          color: AppColors.surface,
+                          border: Border.all(color: AppColors.elevated),
                         ),
                         padding: const EdgeInsets.all(Dimensions.space12),
                         child: Column(
@@ -681,7 +702,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                         avatarUrl: artist.avatarUrl,
                         size: 76,
                         borderWidth: 1.5,
-                        borderColor: AppColors.cyanAccent.withOpacity(0.4),
+                        borderColor: AppColors.elevated,
                       ),
                       const SizedBox(height: Dimensions.space8),
                       Text(
@@ -713,28 +734,94 @@ class _HomeViewState extends ConsumerState<HomeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader(
-          context,
-          title: 'Trending Tamil',
-          icon: Icons.local_fire_department,
-          actionText: _trendingTamil.isNotEmpty ? 'See all' : null,
-          onActionTap: _trendingTamil.isNotEmpty
-              ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PlaylistDetailView(
-                        title: 'Trending Tamil',
-                        subtitle: 'Hot legal tracks & trending hits',
-                        songs: _trendingTamil,
+        // Trending Header with title, updated time, refresh button, and 'See all'
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Dimensions.space16,
+            Dimensions.space12,
+            Dimensions.space16,
+            Dimensions.space12,
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.local_fire_department, size: 20, color: AppColors.accent),
+              const SizedBox(width: Dimensions.space8),
+              Text(
+                'Trending Tamil',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.2,
+                      color: AppColors.textPrimary,
+                    ),
+              ),
+              const SizedBox(width: Dimensions.space8),
+              Text(
+                '• ${_getUpdatedTimeText()}',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+              const Spacer(),
+              // Circular Refresh Button with anti-spam lock & loading spinner
+              IconButton(
+                iconSize: 20,
+                splashRadius: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                tooltip: 'Refresh Trending Batch',
+                onPressed: _isRefreshing ? null : _handleRefreshTap,
+                icon: _isRefreshing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.accent,
+                        ),
+                      )
+                    : const Icon(Icons.refresh, color: AppColors.accent),
+              ),
+              if (_trendingTamil.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                InkWell(
+                  borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                  onTap: () async {
+                    final poolState = await HomeContentService.getTrendingTamilPool(localCatalog: const []);
+                    final fullRanked = poolState.fullRankedPool.isNotEmpty
+                        ? poolState.fullRankedPool.take(100).toList()
+                        : _trendingTamil;
+                    if (context.mounted) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PlaylistDetailView(
+                            title: 'Trending Tamil',
+                            subtitle: 'Top ranked legal tracks & momentum hits (${fullRanked.length} songs)',
+                            songs: fullRanked,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Text(
+                      'See all',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  );
-                }
-              : null,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-        if (_isLoadingTrending)
-          _buildSectionSkeleton(height: 120)
+        if (_isLoadingTrending && _trendingTamil.isEmpty)
+          _buildSectionSkeleton(height: 140)
         else if (_trendingTamil.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16, vertical: 8),
@@ -747,7 +834,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.wifi_off_rounded, color: AppColors.cyanAccent, size: 24),
+                  Icon(Icons.wifi_off_rounded, color: AppColors.accent, size: 24),
                   SizedBox(width: Dimensions.space12),
                   Expanded(
                     child: Text(
@@ -775,13 +862,14 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           );
                     }
                   },
-                  icon: const Icon(Icons.play_arrow, color: Colors.black, size: 18),
-                  label: const Text('Play all', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                  label: const Text('Play all', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     minimumSize: const Size(90, 36),
                     padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                 ),
                 const SizedBox(width: Dimensions.space12),
@@ -802,24 +890,26 @@ class _HomeViewState extends ConsumerState<HomeView> {
                     side: const BorderSide(color: AppColors.accent),
                     minimumSize: const Size(90, 36),
                     padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: Dimensions.space8),
-          // Top 6 trending tracks rendered as SongTiles
-          ..._trendingTamil.take(6).map((song) {
+          // Top 20 ranked trending tracks rendered as SongTiles with rank numbers
+          ...List.generate(_trendingTamil.length, (index) {
+            final song = _trendingTamil[index];
             final playerState = ref.watch(audioPlayerControllerProvider);
             return SongTile(
               song: song,
+              rankNumber: index + 1,
               isPlaying: playerState.currentSong?.id == song.id,
               onTap: () {
                 ref.read(audioPlayerControllerProvider.notifier).playSong(
                       song,
                       queue: _trendingTamil,
-                      index: _trendingTamil.indexOf(song),
+                      index: index,
                     );
               },
             );

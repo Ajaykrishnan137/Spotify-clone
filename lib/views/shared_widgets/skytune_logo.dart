@@ -5,38 +5,7 @@ import '../../core/constants/app_colors.dart';
 
 /// Provider for dynamic color theme extracted or tuned for SkyTune
 final nowPlayingThemeColorProvider = Provider<Color>((ref) {
-  final playerState = ref.watch(audioPlayerControllerProvider);
-  final song = playerState.currentSong;
-  if (song == null) {
-    return AppColors.cyanAccent;
-  }
-
-  final genre = song.genre.toLowerCase();
-  if (genre.contains('tamil')) {
-    return const Color(0xFFFF7043); // Coral Sunset
-  } else if (genre.contains('malayalam')) {
-    return AppColors.cyanAccent;    // Sky Cyan
-  } else if (genre.contains('sai')) {
-    return const Color(0xFFFF5252); // Warm Rose
-  } else if (genre.contains('pradeep')) {
-    return AppColors.softGold;      // Soft Gold
-  } else if (genre.contains('lana')) {
-    return const Color(0xFF7C4DFF); // Deep Indigo
-  } else if (genre.contains('love')) {
-    return AppColors.sunsetCoral;   // Sunset Coral
-  }
-
-  // Harmonic SkyTune palette
-  final hues = [
-    AppColors.cyanAccent,
-    AppColors.primarySkyBlue,
-    const Color(0xFF5B4BFF),
-    AppColors.sunsetCoral,
-    AppColors.softGold,
-    const Color(0xFF00E676),
-  ];
-  final hash = song.title.hashCode.abs();
-  return hues[hash % hues.length];
+  return AppColors.primarySkyBlue;
 });
 
 /// SkyTune Animated Brand Logo (Cloud + Soundwave bars + Crescent accent)
@@ -96,15 +65,7 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
       height: widget.size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(widget.size * 0.225),
-        gradient: AppColors.logoGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primarySkyBlue.withOpacity(0.4),
-            blurRadius: 10,
-            spreadRadius: 1,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: AppColors.accent,
       ),
       child: Center(
         child: CustomPaint(
@@ -114,18 +75,11 @@ class _SkyTuneDynamicLogoState extends ConsumerState<SkyTuneDynamicLogo>
       ),
     );
 
-    if (widget.animated && playerState.isPlaying) {
-      return ScaleTransition(
-        scale: _scaleAnimation,
-        child: content,
-      );
-    }
-
     return content;
   }
 }
 
-/// Wordmark widget "Sky" (white) + "Tune" (sky cyan)
+/// Wordmark widget "Sky" (white) + "Tune" (muted sky blue)
 class SkyTuneWordmark extends StatelessWidget {
   final double fontSize;
 
@@ -142,7 +96,7 @@ class SkyTuneWordmark extends StatelessWidget {
         ),
         children: const [
           TextSpan(text: 'Sky', style: TextStyle(color: Colors.white)),
-          TextSpan(text: 'Tune', style: TextStyle(color: AppColors.cyanAccent)),
+          TextSpan(text: 'Tune', style: TextStyle(color: AppColors.accent)),
         ],
       ),
     );
