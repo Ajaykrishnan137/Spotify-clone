@@ -62,25 +62,43 @@ class HomeContentService {
       {
         'title': 'Daily Mix 1',
         'subtitle': 'Acoustic & Melodies',
-        'colors': [const Color(0xFF1F2B3E), const Color(0xFF161F2E)],
+        'color': const Color(0xFF1E90FF),
         'songs': _extractSongsForKeywords(history, allCatalog, ['melody', 'acoustic', 'love', 'chill']),
+      },
+      {
+        'title': 'Daily Mix 2',
+        'subtitle': 'Tamil & Pop Hits',
+        'color': const Color(0xFFE8115B),
+        'songs': _extractSongsForKeywords(history, allCatalog, ['tamil', 'pop', 'dance', 'energy']),
+      },
+      {
+        'title': 'Daily Mix 3',
+        'subtitle': 'Trending & Fresh Beats',
+        'color': const Color(0xFFF59B23),
+        'songs': _extractSongsForKeywords(history, allCatalog, ['trending', 'new', 'beat', 'hit']),
       },
       {
         'title': 'Chill Mix',
         'subtitle': 'Relaxing rhythms & vibes',
-        'colors': [const Color(0xFF1E2F32), const Color(0xFF162125)],
+        'color': const Color(0xFF00A3A3),
         'songs': _extractSongsForKeywords(history, allCatalog, ['chill', 'peace', 'slow', 'breeze']),
       },
       {
         'title': 'Throwback Mix',
         'subtitle': 'Timeless hits you love',
-        'colors': [const Color(0xFF33222E), const Color(0xFF221720)],
+        'color': const Color(0xFF8D67AB),
         'songs': _extractSongsForKeywords(history, allCatalog, ['hits', 'classic', 'harris', 'rey']),
       },
       {
-        'title': 'Focus Flow',
+        'title': 'Workout Mix',
+        'subtitle': 'High energy & power beats',
+        'color': const Color(0xFFE13300),
+        'songs': _extractSongsForKeywords(history, allCatalog, ['workout', 'power', 'fast', 'bass', 'dance']),
+      },
+      {
+        'title': 'Focus Mix',
         'subtitle': 'Instruments & concentration',
-        'colors': [const Color(0xFF332E1F), const Color(0xFF231E15)],
+        'color': const Color(0xFF2ECC71),
         'songs': _extractSongsForKeywords(history, allCatalog, ['pradeep', 'instrumental', 'focus', 'flow']),
       },
     ];

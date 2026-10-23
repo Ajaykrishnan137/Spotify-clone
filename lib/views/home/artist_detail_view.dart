@@ -125,7 +125,6 @@ class _ArtistDetailViewState extends ConsumerState<ArtistDetailView> {
                 onTap: () {
                   Navigator.pop(ctx);
                   ref.read(downloadControllerProvider.notifier).startDownload(song);
-                  AppSnackBar.showInfo(context: context, message: 'Downloading "${song.title}"...');
                 },
               ),
             ],

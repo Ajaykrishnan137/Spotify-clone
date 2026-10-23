@@ -31,6 +31,7 @@ class PlaylistDetailView extends ConsumerStatefulWidget {
   final String? playlistId;
   final bool isImportedPlaylist;
   final String? importedCategoryName;
+  final Color? themeColor;
 
   const PlaylistDetailView({
     super.key,
@@ -41,6 +42,7 @@ class PlaylistDetailView extends ConsumerStatefulWidget {
     this.playlistId,
     this.isImportedPlaylist = false,
     this.importedCategoryName,
+    this.themeColor,
   });
 
   @override
@@ -560,15 +562,16 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                 children: [
                   if (widget.coverUrl != null && widget.coverUrl!.isNotEmpty)
                     AppImage(url: widget.coverUrl!, fit: BoxFit.cover, borderRadius: 0)
+                  else if (widget.themeColor != null)
+                    Container(
+                      color: widget.themeColor,
+                      child: const Center(
+                        child: Icon(Icons.music_note, size: 80, color: Colors.white70),
+                      ),
+                    )
                   else
                     Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF2E77D0), Color(0xFF121212)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
+                      color: AppColors.surface,
                       child: const Center(
                         child: Icon(Icons.music_note, size: 80, color: Colors.white54),
                       ),
@@ -576,7 +579,13 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.transparent, AppColors.background.withOpacity(0.9), AppColors.background],
+                        colors: [
+                          widget.themeColor != null
+                              ? widget.themeColor!.withOpacity(0.4)
+                              : Colors.transparent,
+                          AppColors.background.withOpacity(0.9),
+                          AppColors.background,
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -639,12 +648,6 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                           tooltip: 'Stop & Cancel This Playlist',
                           onPressed: () {
                             ref.read(downloadControllerProvider.notifier).cancelPlaylistDownload(_currentPlaylistIdKey);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Playlist download cancelled.'),
-                                backgroundColor: AppColors.surface,
-                              ),
-                            );
                           },
                         ),
                       ],
@@ -739,13 +742,6 @@ class _PlaylistDetailViewState extends ConsumerState<PlaylistDetailView> {
                               _currentSongs,
                               playlistId: _currentPlaylistIdKey,
                             );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Starting download of $remainingToDownload songs...'),
-                            duration: const Duration(seconds: 2),
-                            backgroundColor: AppColors.card,
-                          ),
-                        );
                       },
                     ),
 

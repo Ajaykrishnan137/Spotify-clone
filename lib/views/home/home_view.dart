@@ -340,117 +340,166 @@ class _HomeViewState extends ConsumerState<HomeView> {
           icon: Icons.auto_awesome,
         ),
         SizedBox(
-          height: 180,
+          height: 195,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: Dimensions.space16),
             itemCount: mixes.length,
             itemBuilder: (context, index) {
               final mix = mixes[index];
               final title = mix['title'] as String;
               final subtitle = mix['subtitle'] as String;
-              final colors = mix['colors'] as List<Color>;
+              final color = (mix['color'] as Color?) ?? const Color(0xFF1E90FF);
               final songs = mix['songs'] as List<SongModel>;
 
+              // Extract 2 or 3 distinct artist names for caption
+              final artistNames = <String>[];
+              for (final s in songs) {
+                final a = s.artist.split('/').first.trim();
+                if (a.isNotEmpty && !artistNames.contains(a)) {
+                  artistNames.add(a);
+                  if (artistNames.length >= 3) break;
+                }
+              }
+              final caption = artistNames.isNotEmpty
+                  ? artistNames.join(', ')
+                  : subtitle;
+
+              final topSong = songs.isNotEmpty ? songs.first : null;
+
               return Container(
-                width: 140,
-                margin: const EdgeInsets.only(right: Dimensions.space12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                  onTap: () {
-                    if (songs.isEmpty) return;
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PlaylistDetailView(
-                          title: title,
-                          subtitle: subtitle,
-                          songs: songs,
+                width: 148,
+                margin: const EdgeInsets.only(right: 12),
+                child: Material(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () {
+                      if (songs.isEmpty) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PlaylistDetailView(
+                            title: title,
+                            subtitle: subtitle,
+                            songs: songs,
+                            themeColor: color,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 130,
-                        width: 140,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-                          color: AppColors.surface,
-                          border: Border.all(color: AppColors.elevated),
-                        ),
-                        padding: const EdgeInsets.all(Dimensions.space12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.35),
-                                    borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                                  ),
-                                  child: const Text(
-                                    'SKYTUNE MIX',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.8,
+                      );
+                    },
+                    splashColor: Colors.black26,
+                    highlightColor: Colors.black12,
+                    child: Stack(
+                      children: [
+                        // Single large rotated cover at bottom right at full brightness (no dark overlay, no glow)
+                        if (topSong != null && topSong.coverUrl.isNotEmpty)
+                          Positioned(
+                            right: -10,
+                            bottom: -10,
+                            child: Transform.rotate(
+                              angle: 0.26, // ~15 degrees
+                              child: Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
                                     ),
+                                  ],
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Image.network(
+                                  topSong.coverUrl,
+                                  fit: BoxFit.cover,
+                                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                                    if (wasSynchronouslyLoaded || frame != null) {
+                                      return child;
+                                    }
+                                    return Container(color: color);
+                                  },
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: Colors.white.withOpacity(0.2),
+                                    child: const Icon(Icons.music_note, color: Colors.white, size: 32),
                                   ),
                                 ),
-                                if (songs.isNotEmpty)
-                                  ArtistAvatar(
-                                    artistName: songs.first.artist.split('/').first.trim(),
-                                    size: 26,
-                                    borderWidth: 1,
-                                    borderColor: Colors.white60,
-                                  ),
-                              ],
+                              ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                          )
+                        else
+                          Positioned(
+                            right: -8,
+                            bottom: -8,
+                            child: Transform.rotate(
+                              angle: 0.26,
+                              child: Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.album_rounded, color: Colors.white, size: 36),
+                              ),
+                            ),
+                          ),
+
+                        // Card Text Content (top-left, max 2 lines title, artist caption)
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                caption,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.92),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.2,
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.25),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${songs.length} tracks',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 15,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${songs.length} songs',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.85),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: Dimensions.space8),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );

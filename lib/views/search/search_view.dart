@@ -48,12 +48,20 @@ class _SearchViewState extends ConsumerState<SearchView> {
   ];
 
   static const List<Map<String, dynamic>> _browseGenres = [
-    {'title': 'Pop & Melody', 'color': Color(0xFF232D42), 'icon': Icons.music_note},
-    {'title': 'Tamil Hits', 'color': Color(0xFF382928), 'icon': Icons.audiotrack},
-    {'title': 'Malayalam Hits', 'color': Color(0xFF1E2E38), 'icon': Icons.waves},
-    {'title': 'Acoustic / Indie', 'color': Color(0xFF312638), 'icon': Icons.mic},
-    {'title': 'Chill & Focus', 'color': Color(0xFF1E332E), 'icon': Icons.spa},
-    {'title': 'Dance / Party', 'color': Color(0xFF383120), 'icon': Icons.celebration},
+    {'title': 'Tamil', 'color': Color(0xFFE8115B), 'icon': Icons.audiotrack},
+    {'title': 'New Releases', 'color': Color(0xFF1E90FF), 'icon': Icons.fiber_new},
+    {'title': 'Trending', 'color': Color(0xFFF59B23), 'icon': Icons.trending_up},
+    {'title': 'Travel', 'color': Color(0xFF2ECC71), 'icon': Icons.flight_takeoff},
+    {'title': 'Sleep', 'color': Color(0xFF8D67AB), 'icon': Icons.nightlight_round},
+    {'title': 'Workout', 'color': Color(0xFFE13300), 'icon': Icons.fitness_center},
+    {'title': 'Romantic', 'color': Color(0xFF00A3A3), 'icon': Icons.favorite},
+    {'title': 'Chill', 'color': Color(0xFFF037A5), 'icon': Icons.spa},
+    {'title': 'Party', 'color': Color(0xFF509BF5), 'icon': Icons.celebration},
+    {'title': 'Focus', 'color': Color(0xFFBA5D07), 'icon': Icons.psychology},
+    {'title': 'Devotional', 'color': Color(0xFF148A08), 'icon': Icons.auto_awesome},
+    {'title': 'Melody', 'color': Color(0xFF477D95), 'icon': Icons.music_note},
+    {'title': '90s Hits', 'color': Color(0xFFE8115B), 'icon': Icons.radio},
+    {'title': 'Instrumental', 'color': Color(0xFF1E90FF), 'icon': Icons.piano},
   ];
 
   StreamSubscription<SearchStreamBatch>? _searchSubscription;
@@ -250,12 +258,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
     for (final song in _searchResult) {
       downloadNotifier.startDownload(song);
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Downloading ${_searchResult.length} legal tracks...'),
-        backgroundColor: AppColors.primarySkyBlue,
-      ),
-    );
   }
 
   Widget _buildSearchResults(AudioPlayerController playerController, PlayerStateData playerState) {
@@ -666,33 +668,66 @@ class _SearchViewState extends ConsumerState<SearchView> {
                           itemCount: _browseGenres.length,
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 1.8,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 1.65,
                           ),
                           itemBuilder: (context, index) {
                             final item = _browseGenres[index];
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(10),
-                              onTap: () {
-                                final title = item['title'] as String;
-                                _searchController.text = title;
-                                _performSearch(title);
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: item['color'] as Color,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppColors.dividers),
-                                ),
-                                padding: const EdgeInsets.all(Dimensions.space12),
-                                child: Text(
-                                  item['title'] as String,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                            final title = item['title'] as String;
+                            final color = item['color'] as Color;
+                            final icon = item['icon'] as IconData;
+
+                            return Material(
+                              color: color,
+                              borderRadius: BorderRadius.circular(12),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap: () {
+                                  _searchController.text = title;
+                                  _performSearch(title);
+                                },
+                                splashColor: Colors.black26,
+                                highlightColor: Colors.black12,
+                                child: Stack(
+                                  children: [
+                                    // Rotated category icon in bottom right corner (full brightness, no glow)
+                                    Positioned(
+                                      right: -8,
+                                      bottom: -8,
+                                      child: Transform.rotate(
+                                        angle: 0.35, // ~20 degrees
+                                        child: Container(
+                                          width: 58,
+                                          height: 58,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.18),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            icon,
+                                            size: 36,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Card title (top-left, bold white, 16-18px, max 2 lines, ellipsis)
+                                    Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: Text(
+                                        title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

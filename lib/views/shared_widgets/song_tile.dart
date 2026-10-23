@@ -110,9 +110,6 @@ class SongTile extends ConsumerWidget {
                   onTap: () {
                     Navigator.pop(ctx);
                     ref.read(downloadControllerProvider.notifier).startDownload(song);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Downloading "${song.title}"...'), backgroundColor: AppColors.accent),
-                    );
                   },
                 ),
               ],
